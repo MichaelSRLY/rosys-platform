@@ -75,10 +75,10 @@
 
 <div class="page-enter max-w-[480px] mx-auto pb-8">
 	<!-- Header -->
-	<div class="sticky top-0 z-20 glass border-b border-white/30 px-5 py-3">
+	<div class="sticky top-0 z-20 glass border-b border-rosys-border/30 px-5 py-3.5">
 		<div class="flex items-center gap-3">
 			<img src="/logowhite.png" alt="Rosys" class="w-7 h-7" />
-			<h1 class="font-[var(--font-display)] italic text-rosys-fg text-[16px] tracking-wide font-medium">
+			<h1 class="font-[var(--font-logo)] italic text-rosys-fg text-[15px] tracking-[0.01em] font-medium">
 				{data.edition.title} Edition
 			</h1>
 		</div>

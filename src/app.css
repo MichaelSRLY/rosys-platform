@@ -1,23 +1,25 @@
 @import 'tailwindcss';
-@import url('https://fonts.googleapis.com/css2?family=Trirong:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap');
 
 @theme {
-	/* Rosys brand — from rosyspatterns.com */
-	--color-rosys-bg: #f7f5f2;
-	--color-rosys-bg-alt: #f0ece6;
-	--color-rosys-fg: #2e2a39;
-	--color-rosys-fg-muted: #6d5c5c;
-	--color-rosys-fg-faint: #8b7e7e;
+	/* Rosys brand — refined */
+	--color-rosys-bg: #f6f4f1;
+	--color-rosys-bg-alt: #edeae5;
+	--color-rosys-fg: #1a1a1a;
+	--color-rosys-fg-secondary: #3d3d3d;
+	--color-rosys-fg-muted: #666;
+	--color-rosys-fg-faint: #999;
 	--color-rosys-accent: #f9ca4f;
 	--color-rosys-accent-hover: #f0be30;
 	--color-rosys-tan: #c6b8a3;
-	--color-rosys-border: #e8e3dc;
+	--color-rosys-border: #e5e2dd;
 	--color-rosys-card: #ffffff;
 	--color-rosys-pink: #d4627a;
-	--color-rosys-success: #4ade80;
+	--color-rosys-success: #34c759;
 
-	--font-display: 'Trirong', serif;
-	--font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+	--font-logo: 'Playfair Display', 'Times New Roman', Georgia, serif;
+	--font-display: 'Playfair Display', Georgia, serif;
+	--font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
 }
 
 * {

@@ -7,7 +7,7 @@
 </svelte:head>
 
 <div class="page-enter px-6 py-8 md:px-10 md:py-12 max-w-5xl mx-auto">
-	<h1 class="font-[var(--font-display)] italic text-rosys-fg text-[28px] font-light tracking-tight mb-2">Size Assistant</h1>
+	<h1 class="font-[var(--font-logo)] italic text-rosys-fg text-[28px] font-light tracking-tight mb-2">Size Assistant</h1>
 	<p class="text-rosys-fg-faint text-[14px] mb-10">AI-powered size recommendations for every pattern</p>
 
 	<div class="flex flex-col items-center justify-center py-20 bg-rosys-card rounded-3xl border border-rosys-border/50 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">

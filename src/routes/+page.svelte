@@ -40,7 +40,7 @@
 <div class="page-enter px-6 py-8 md:px-10 md:py-12 max-w-5xl mx-auto">
 	<!-- Hero -->
 	<div class="mb-10">
-		<h1 class="font-[var(--font-display)] italic text-rosys-fg text-[32px] md:text-[40px] font-light leading-tight tracking-tight">
+		<h1 class="font-[var(--font-logo)] italic text-rosys-fg text-[32px] md:text-[40px] font-light leading-tight tracking-tight">
 			Welcome back
 		</h1>
 		<p class="text-rosys-fg-faint text-[15px] mt-2">Your sewing pattern platform</p>

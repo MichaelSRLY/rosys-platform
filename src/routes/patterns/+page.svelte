@@ -26,7 +26,7 @@
 	<!-- Header -->
 	<div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
 		<div>
-			<h1 class="font-[var(--font-display)] italic text-rosys-fg text-[28px] font-light tracking-tight">Patterns</h1>
+			<h1 class="font-[var(--font-logo)] italic text-rosys-fg text-[28px] font-light tracking-tight">Patterns</h1>
 			<p class="text-rosys-fg-faint text-[14px] mt-1">{data.patterns.length} designs in your library</p>
 		</div>
 

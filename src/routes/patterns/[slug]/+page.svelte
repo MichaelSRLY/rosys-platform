@@ -46,7 +46,7 @@
 
 		<!-- Details -->
 		<div>
-			<h1 class="font-[var(--font-display)] italic text-rosys-fg text-[32px] font-light leading-tight tracking-tight mb-2">
+			<h1 class="font-[var(--font-logo)] italic text-rosys-fg text-[32px] font-light leading-tight tracking-tight mb-2">
 				{pattern.pattern_name}
 			</h1>
 

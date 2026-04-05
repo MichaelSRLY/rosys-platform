@@ -59,7 +59,7 @@
 	<!-- Logo -->
 	<div class="mb-10 text-center">
 		<img src="/logowhite.png" alt="Rosys Patterns" class="w-14 h-14 mx-auto mb-5" />
-		<h1 class="font-[var(--font-display)] italic text-rosys-fg text-[28px] tracking-wide font-light">
+		<h1 class="font-[var(--font-logo)] italic text-rosys-fg text-[28px] tracking-wide font-light">
 			Rosys Patterns
 		</h1>
 	</div>
