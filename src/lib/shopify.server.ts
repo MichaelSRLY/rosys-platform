@@ -1,5 +1,7 @@
+import { env } from '$env/dynamic/private';
+
 const SHOPIFY_STORE = '046318-dd.myshopify.com';
-const SHOPIFY_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN || '';
+const SHOPIFY_TOKEN = env.SHOPIFY_ACCESS_TOKEN || '';
 const API_VERSION = '2026-01';
 
 interface ShopifyLineItem {

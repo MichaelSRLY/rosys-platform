@@ -1,6 +1,7 @@
 import pg from 'pg';
+import { env } from '$env/dynamic/private';
 
-const RAILWAY_URL = process.env.RAILWAY_DATABASE_URL || '';
+const RAILWAY_URL = env.RAILWAY_DATABASE_URL || '';
 
 let pool: pg.Pool | null = null;
 
