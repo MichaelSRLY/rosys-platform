@@ -5,8 +5,6 @@
 	let search = $state('');
 	let showAll = $state(false);
 
-	const STORAGE_BASE = 'https://lahzrlyhojyfadjasdrc.supabase.co/storage/v1/object/public/pattern-files';
-
 	const myPatterns = $derived([...data.purchasedPatterns, ...data.freePatterns]);
 	const myPatternSlugs = $derived(new Set(myPatterns.map((p) => p.pattern_slug)));
 
@@ -20,9 +18,8 @@
 				)
 	);
 
-	function thumbUrl(slug: string, name: string): string {
-		const clean = name.toLowerCase().replace(/\s+/g, '_');
-		return `${STORAGE_BASE}/${slug}/finished_${clean}_images/finished_${clean}_front.webp`;
+	function thumbUrl(slug: string): string {
+		return data.thumbnails[slug] || '';
 	}
 
 	function isPurchased(slug: string): boolean {
@@ -158,7 +155,7 @@
 		<div class="aspect-[3/4] bg-rosys-bg-alt overflow-hidden relative">
 			{#if pattern.has_finished_images}
 				<img
-					src={thumbUrl(pattern.pattern_slug, pattern.pattern_name)}
+					src={thumbUrl(pattern.pattern_slug)}
 					alt={pattern.pattern_name}
 					class="w-full h-full object-cover {isLocked ? 'blur-[2px]' : 'group-hover:scale-[1.04]'} transition-transform duration-500 ease-out"
 					loading="lazy"
