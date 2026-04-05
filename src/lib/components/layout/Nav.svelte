@@ -27,9 +27,9 @@
 	}
 </script>
 
-<!-- Desktop sidebar — floating, rounded, Apple-like -->
-<div class="hidden md:flex flex-col w-[280px] p-3 shrink-0">
-	<aside class="flex flex-col flex-1 bg-rosys-card/80 backdrop-blur-xl rounded-2xl border border-rosys-border/50 shadow-[0_0_0_1px_rgba(0,0,0,0.02),0_2px_8px_rgba(0,0,0,0.04)] overflow-hidden">
+<!-- Desktop sidebar — fixed floating panel -->
+<div class="hidden md:block w-[260px] shrink-0">
+	<aside class="flex flex-col h-full bg-rosys-card/80 backdrop-blur-xl rounded-2xl border border-rosys-border/50 shadow-[0_0_0_1px_rgba(0,0,0,0.02),0_2px_8px_rgba(0,0,0,0.04)] overflow-hidden mr-3">
 		<!-- Brand -->
 		<div class="px-5 pt-6 pb-4">
 			<div class="flex items-center gap-3">
