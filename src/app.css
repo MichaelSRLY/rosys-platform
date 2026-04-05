@@ -1,0 +1,27 @@
+@import 'tailwindcss';
+
+/* Rosys brand tokens */
+@theme {
+	--color-rosys-cream: #f5f1eb;
+	--color-rosys-brown: #4a3f35;
+	--color-rosys-brown-light: #b0a99f;
+	--color-rosys-pink: #ec4899;
+	--color-rosys-pink-light: #fbcfe8;
+}
+
+/* Base resets */
+* {
+	-webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+	margin: 0;
+	padding: 0;
+	height: 100%;
+	background: var(--color-rosys-cream);
+}
+
+/* Prevent zoom on input focus (mobile) */
+input, select, textarea {
+	font-size: 16px !important;
+}
