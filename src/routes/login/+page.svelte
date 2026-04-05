@@ -16,16 +16,8 @@
 		loading = true;
 		error = '';
 
-		const { error: signInError } = await supabase.auth.signInWithPassword({
-			email,
-			password
-		});
-
-		if (signInError) {
-			error = signInError.message;
-			loading = false;
-			return;
-		}
+		const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+		if (err) { error = err.message; loading = false; return; }
 
 		await invalidateAll();
 		goto('/');
@@ -35,156 +27,102 @@
 		loading = true;
 		error = '';
 
-		if (communityKey !== 'Community2025') {
-			error = 'Invalid community key. Please try again.';
-			loading = false;
-			return;
-		}
+		if (communityKey !== 'Community2025') { error = 'Invalid community key.'; loading = false; return; }
+		if (password.length < 6) { error = 'Password must be at least 6 characters.'; loading = false; return; }
 
-		if (password.length < 6) {
-			error = 'Password must be at least 6 characters.';
-			loading = false;
-			return;
-		}
+		const clean = username.toLowerCase().trim();
+		const { data: existing } = await supabase.from('profiles').select('id').eq('username', clean).single();
+		if (existing) { error = 'Username already taken.'; loading = false; return; }
 
-		const cleanUsername = username.toLowerCase().trim();
-		const cleanEmail = email.toLowerCase().trim();
-
-		// Check if username taken
-		const { data: existing } = await supabase
-			.from('profiles')
-			.select('id')
-			.eq('username', cleanUsername)
-			.single();
-
-		if (existing) {
-			error = 'This username is already taken.';
-			loading = false;
-			return;
-		}
-
-		const { error: signUpError } = await supabase.auth.signUp({
-			email: cleanEmail,
+		const { error: err } = await supabase.auth.signUp({
+			email: email.toLowerCase().trim(),
 			password,
-			options: { data: { username: cleanUsername } }
+			options: { data: { username: clean } }
 		});
-
-		if (signUpError) {
-			error = signUpError.message;
-			loading = false;
-			return;
-		}
+		if (err) { error = err.message; loading = false; return; }
 
 		await invalidateAll();
 		goto('/');
 	}
 
-	function handleSubmit(e: Event) {
+	function submit(e: Event) {
 		e.preventDefault();
-		if (mode === 'login') handleLogin();
-		else handleRegister();
+		mode === 'login' ? handleLogin() : handleRegister();
 	}
 </script>
 
 <svelte:head>
-	<title>Login — Rosys Patterns</title>
+	<title>Sign In — Rosys Patterns</title>
 </svelte:head>
 
-<div class="min-h-screen bg-rosys-cream flex items-center justify-center px-4">
-	<div class="w-full max-w-md">
-		<!-- Logo -->
-		<div class="text-center mb-8">
-			<img src="/logowhite.png" alt="Rosys Patterns" class="w-16 h-16 mx-auto mb-4" />
-			<h1 class="font-serif italic text-rosys-brown text-2xl tracking-widest">Rosys Patterns</h1>
-			<p class="text-rosys-brown/60 text-sm mt-1">Your sewing pattern platform</p>
-		</div>
+<div class="min-h-screen bg-rosys-bg flex flex-col items-center justify-center px-6">
+	<!-- Logo -->
+	<div class="mb-10 text-center">
+		<img src="/logowhite.png" alt="Rosys Patterns" class="w-14 h-14 mx-auto mb-5" />
+		<h1 class="font-[var(--font-display)] italic text-rosys-fg text-[28px] tracking-wide font-light">
+			Rosys Patterns
+		</h1>
+	</div>
 
-		<!-- Form -->
-		<form
-			onsubmit={handleSubmit}
-			class="bg-white rounded-2xl shadow-lg p-8 space-y-5"
-		>
-			<div class="flex gap-2 mb-2">
+	<!-- Card -->
+	<div class="w-full max-w-[380px]">
+		<form onsubmit={submit} class="bg-rosys-card rounded-2xl shadow-[0_2px_20px_rgba(0,0,0,0.06)] p-7 space-y-5">
+			<!-- Toggle -->
+			<div class="flex bg-rosys-bg rounded-[10px] p-0.5">
 				<button
 					type="button"
-					class="flex-1 py-2 rounded-lg text-sm font-medium transition-colors {mode === 'login'
-						? 'bg-rosys-brown text-white'
-						: 'bg-rosys-cream text-rosys-brown'}"
+					class="flex-1 py-2 rounded-[8px] text-[13px] font-medium transition-all duration-200
+						{mode === 'login' ? 'bg-rosys-card shadow-sm text-rosys-fg' : 'text-rosys-fg-faint'}"
 					onclick={() => (mode = 'login')}
-				>
-					Login
-				</button>
+				>Sign In</button>
 				<button
 					type="button"
-					class="flex-1 py-2 rounded-lg text-sm font-medium transition-colors {mode === 'register'
-						? 'bg-rosys-brown text-white'
-						: 'bg-rosys-cream text-rosys-brown'}"
+					class="flex-1 py-2 rounded-[8px] text-[13px] font-medium transition-all duration-200
+						{mode === 'register' ? 'bg-rosys-card shadow-sm text-rosys-fg' : 'text-rosys-fg-faint'}"
 					onclick={() => (mode = 'register')}
-				>
-					Register
-				</button>
+				>Register</button>
 			</div>
 
 			{#if mode === 'register'}
 				<div>
-					<label for="username" class="block text-sm font-medium text-rosys-brown mb-1">Username</label>
-					<input
-						id="username"
-						type="text"
-						bind:value={username}
-						required
-						class="w-full px-4 py-3 rounded-lg border border-rosys-brown/20 focus:outline-none focus:ring-2 focus:ring-rosys-brown/40"
-						placeholder="Choose a username"
-					/>
+					<label for="username" class="block text-[12px] font-medium text-rosys-fg-faint uppercase tracking-wider mb-1.5">Username</label>
+					<input id="username" type="text" bind:value={username} required
+						class="w-full px-4 py-3 rounded-xl bg-rosys-bg border-none text-[15px] text-rosys-fg placeholder-rosys-fg-faint/50 focus:outline-none focus:ring-2 focus:ring-rosys-fg/20 transition-shadow"
+						placeholder="Choose a username" />
 				</div>
 			{/if}
 
 			<div>
-				<label for="email" class="block text-sm font-medium text-rosys-brown mb-1">Email</label>
-				<input
-					id="email"
-					type="email"
-					bind:value={email}
-					required
-					class="w-full px-4 py-3 rounded-lg border border-rosys-brown/20 focus:outline-none focus:ring-2 focus:ring-rosys-brown/40"
-					placeholder="your@email.com"
-				/>
+				<label for="email" class="block text-[12px] font-medium text-rosys-fg-faint uppercase tracking-wider mb-1.5">Email</label>
+				<input id="email" type="email" bind:value={email} required
+					class="w-full px-4 py-3 rounded-xl bg-rosys-bg border-none text-[15px] text-rosys-fg placeholder-rosys-fg-faint/50 focus:outline-none focus:ring-2 focus:ring-rosys-fg/20 transition-shadow"
+					placeholder="your@email.com" />
 			</div>
 
 			<div>
-				<label for="password" class="block text-sm font-medium text-rosys-brown mb-1">Password</label>
-				<input
-					id="password"
-					type="password"
-					bind:value={password}
-					required
-					class="w-full px-4 py-3 rounded-lg border border-rosys-brown/20 focus:outline-none focus:ring-2 focus:ring-rosys-brown/40"
-					placeholder="••••••"
-				/>
+				<label for="password" class="block text-[12px] font-medium text-rosys-fg-faint uppercase tracking-wider mb-1.5">Password</label>
+				<input id="password" type="password" bind:value={password} required
+					class="w-full px-4 py-3 rounded-xl bg-rosys-bg border-none text-[15px] text-rosys-fg placeholder-rosys-fg-faint/50 focus:outline-none focus:ring-2 focus:ring-rosys-fg/20 transition-shadow"
+					placeholder="••••••" />
 			</div>
 
 			{#if mode === 'register'}
 				<div>
-					<label for="key" class="block text-sm font-medium text-rosys-brown mb-1">Community Key</label>
-					<input
-						id="key"
-						type="text"
-						bind:value={communityKey}
-						required
-						class="w-full px-4 py-3 rounded-lg border border-rosys-brown/20 focus:outline-none focus:ring-2 focus:ring-rosys-brown/40"
-						placeholder="Enter your community key"
-					/>
+					<label for="key" class="block text-[12px] font-medium text-rosys-fg-faint uppercase tracking-wider mb-1.5">Community Key</label>
+					<input id="key" type="text" bind:value={communityKey} required
+						class="w-full px-4 py-3 rounded-xl bg-rosys-bg border-none text-[15px] text-rosys-fg placeholder-rosys-fg-faint/50 focus:outline-none focus:ring-2 focus:ring-rosys-fg/20 transition-shadow"
+						placeholder="Enter community key" />
 				</div>
 			{/if}
 
 			{#if error}
-				<p class="text-red-500 text-sm">{error}</p>
+				<p class="text-rosys-pink text-[13px] font-medium">{error}</p>
 			{/if}
 
 			<button
 				type="submit"
 				disabled={loading}
-				class="w-full py-3 rounded-lg bg-rosys-brown text-white font-medium hover:bg-rosys-brown/90 transition-colors disabled:opacity-50"
+				class="w-full py-3.5 rounded-xl bg-rosys-fg text-white text-[14px] font-semibold tracking-[-0.01em] hover:bg-rosys-fg/90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40"
 			>
 				{loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Account'}
 			</button>
