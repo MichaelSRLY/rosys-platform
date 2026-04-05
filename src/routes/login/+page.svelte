@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { createClient } from '$lib/supabase';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 
 	let mode = $state<'login' | 'register'>('login');
 	let email = $state('');
@@ -27,6 +27,7 @@
 			return;
 		}
 
+		await invalidateAll();
 		goto('/');
 	}
 
@@ -74,6 +75,7 @@
 			return;
 		}
 
+		await invalidateAll();
 		goto('/');
 	}
 
