@@ -1,22 +1,43 @@
-import { query } from '$lib/db.server';
+import { getAllPatterns, matchProductsToPatterns, getFreePatterns, type Pattern } from '$lib/patterns.server';
+import { fetchOrdersByEmail, extractProductTitles } from '$lib/shopify.server';
 import type { PageServerLoad } from './$types';
 
-interface PatternRow {
-	pattern_slug: string;
-	pattern_name: string;
-	has_a0: boolean;
-	has_instructions: boolean;
-	has_finished_images: boolean;
-	has_dxf: boolean;
-	shopify_name: string | null;
-}
+export const load: PageServerLoad = async ({ locals }) => {
+	const session = locals.session;
+	const allPatterns = await getAllPatterns();
 
-export const load: PageServerLoad = async () => {
-	const patterns = await query<PatternRow>(
-		`SELECT pattern_slug, pattern_name, has_a0, has_instructions, has_finished_images, has_dxf, shopify_name
-		 FROM cs_pattern_catalog
-		 ORDER BY pattern_name`
-	);
+	let purchasedPatterns: Pattern[] = [];
+	let freePatterns: Pattern[] = [];
+	let orderCount = 0;
 
-	return { patterns };
+	if (session?.user?.email) {
+		// Fetch Shopify orders by email
+		const orders = await fetchOrdersByEmail(session.user.email);
+		orderCount = orders.length;
+
+		if (orders.length > 0) {
+			const productTitles = extractProductTitles(orders);
+			purchasedPatterns = matchProductsToPatterns(productTitles, allPatterns);
+		}
+
+		// Get profile signup date for free pattern entitlement
+		const { data: profile } = await locals.supabase
+			.from('profiles')
+			.select('created_at')
+			.eq('id', session.user.id)
+			.single();
+
+		freePatterns = getFreePatterns(profile?.created_at || null, allPatterns);
+
+		// Remove duplicates — if a free pattern was also purchased, keep it in purchased only
+		const purchasedSlugs = new Set(purchasedPatterns.map((p) => p.pattern_slug));
+		freePatterns = freePatterns.filter((p) => !purchasedSlugs.has(p.pattern_slug));
+	}
+
+	return {
+		purchasedPatterns,
+		freePatterns,
+		allPatterns,
+		orderCount
+	};
 };
