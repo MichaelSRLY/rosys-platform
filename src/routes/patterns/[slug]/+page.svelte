@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ArrowLeft, Download, FileText, Box, Scissors, Play, ExternalLink, BookOpen } from 'lucide-svelte';
+	import { ArrowLeft, Download, FileText, Box, Scissors, Play, ExternalLink, BookOpen, Ruler, Calculator } from 'lucide-svelte';
 
 	let { data } = $props();
 	const { pattern, tutorials, description, downloads, imageUrl } = data;
@@ -65,6 +65,32 @@
 					<div class="flex-1">
 						<p class="text-[15px] font-semibold">Read Instructions</p>
 						<p class="text-[12px] text-white/60">Interactive step-by-step guide</p>
+					</div>
+				</a>
+
+				<a
+					href="/patterns/{pattern.pattern_slug}/sizing"
+					class="flex items-center gap-4 p-4 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition-all duration-150 group"
+				>
+					<div class="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+						<Ruler class="w-5 h-5" strokeWidth={1.5} />
+					</div>
+					<div class="flex-1">
+						<p class="text-[15px] font-semibold">Find My Size</p>
+						<p class="text-[12px] text-white/60">AI-powered size recommendation</p>
+					</div>
+				</a>
+
+				<a
+					href="/patterns/{pattern.pattern_slug}/fabric"
+					class="flex items-center gap-4 p-4 bg-amber-500 text-white rounded-xl hover:bg-amber-600 active:scale-[0.98] transition-all duration-150 group"
+				>
+					<div class="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+						<Calculator class="w-5 h-5" strokeWidth={1.5} />
+					</div>
+					<div class="flex-1">
+						<p class="text-[15px] font-semibold">Fabric Calculator</p>
+						<p class="text-[12px] text-white/60">How much fabric do you need?</p>
 					</div>
 				</a>
 			</div>

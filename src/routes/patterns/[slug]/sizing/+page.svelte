@@ -1,5 +1,8 @@
 <script lang="ts">
-	import { Ruler, Sparkles, Loader2 } from 'lucide-svelte';
+	import { ArrowLeft, Ruler, Sparkles, Loader2 } from 'lucide-svelte';
+
+	let { data } = $props();
+	const { pattern, sizeChart } = data;
 
 	let bust = $state('');
 	let waist = $state('');
@@ -23,11 +26,12 @@
 					bust: parseFloat(bust),
 					waist: parseFloat(waist),
 					hip: parseFloat(hip),
-					height: height ? parseFloat(height) : undefined
+					height: height ? parseFloat(height) : undefined,
+					pattern_slug: pattern.pattern_slug
 				})
 			});
 
-			if (!res.ok) throw new Error('Failed');
+			if (!res.ok) throw new Error('Failed to get recommendation');
 			const json = await res.json();
 			recommendation = json.recommendation;
 		} catch {
@@ -39,25 +43,36 @@
 </script>
 
 <svelte:head>
-	<title>Size Assistant — Rosys Patterns</title>
+	<title>Size Assistant — {pattern.pattern_name}</title>
 </svelte:head>
 
 <div class="page-enter px-6 py-8 md:px-10 md:py-12 max-w-3xl mx-auto">
-	<div class="flex items-center gap-3 mb-2">
+	<a href="/patterns/{pattern.pattern_slug}" class="inline-flex items-center gap-1.5 text-rosys-fg-faint hover:text-rosys-fg text-[13px] font-medium mb-8 transition-colors">
+		<ArrowLeft class="w-4 h-4" strokeWidth={1.5} />
+		{pattern.pattern_name}
+	</a>
+
+	<div class="flex items-center gap-3 mb-8">
 		<div class="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center">
 			<Ruler class="w-6 h-6 text-emerald-500" strokeWidth={1.5} />
 		</div>
 		<div>
-			<h1 class="font-[var(--font-logo)] italic text-rosys-fg text-[28px] font-light tracking-tight">Size Assistant</h1>
-			<p class="text-rosys-fg-faint text-[13px]">AI-powered sizing for all Rosys Patterns</p>
+			<h1 class="font-[var(--font-logo)] italic text-rosys-fg text-[26px] font-light tracking-tight">Size Assistant</h1>
+			<p class="text-rosys-fg-faint text-[13px]">AI-powered recommendation for {pattern.pattern_name}</p>
 		</div>
 	</div>
 
-	<p class="text-rosys-fg-muted text-[14px] leading-relaxed mb-8 mt-4 max-w-lg">
-		Enter your body measurements and our AI will recommend the best size. For pattern-specific sizing,
-		visit any pattern and use the sizing tab there.
-	</p>
+	<!-- Size chart reference -->
+	{#if sizeChart}
+		<div class="bg-rosys-card rounded-2xl border border-rosys-border/50 p-5 mb-8 shadow-sm">
+			<h2 class="text-[11px] font-semibold text-rosys-fg-faint uppercase tracking-[0.08em] mb-3">Size Chart Reference</h2>
+			<div class="text-[13px] text-rosys-fg-muted font-mono whitespace-pre-line leading-relaxed overflow-x-auto">
+				{sizeChart}
+			</div>
+		</div>
+	{/if}
 
+	<!-- Measurement inputs -->
 	<div class="bg-rosys-card rounded-2xl border border-rosys-border/50 p-6 mb-6 shadow-sm">
 		<h2 class="text-[11px] font-semibold text-rosys-fg-faint uppercase tracking-[0.08em] mb-4">Your Measurements (cm)</h2>
 		<div class="grid grid-cols-2 gap-4">
@@ -103,6 +118,7 @@
 		{/if}
 	</div>
 
+	<!-- AI Recommendation -->
 	{#if recommendation}
 		<div class="bg-rosys-card rounded-2xl border border-emerald-200/60 p-6 shadow-sm page-enter">
 			<div class="flex items-center gap-2 mb-4">
