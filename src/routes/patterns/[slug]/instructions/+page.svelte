@@ -41,10 +41,15 @@
 		about: Info, materials: Package, fabrics: Palette, pieces: Scissors, layout: LayoutGrid, step: Shirt
 	};
 
-	function imgUrl(page: number | null): string {
+	function pdfPageUrl(page: number | null): string {
 		if (!page) return '';
 		return `/api/patterns/page-image?slug=${pattern.pattern_slug}&page=${page}`;
 	}
+
+	// Check if current page has admin-uploaded illustrations or PDF page fallback
+	const hasIllustration = $derived(
+		(current.illustrations && current.illustrations.length > 0) || !!current.pdfPage
+	);
 </script>
 
 <svelte:window onkeydown={handleKey} />
@@ -137,10 +142,11 @@
 					</div>
 				</div>
 
-				<!-- Content + Illustration side-by-side on desktop -->
-				<div class="grid {current.illustrationPage ? 'md:grid-cols-[1fr_1fr]' : ''} gap-6">
+				<!-- Content + Illustration — layout depends on admin config -->
+				<div class="{current.layout === 'text-only' ? '' : current.layout === 'image-top' ? 'flex flex-col gap-6' : hasIllustration ? 'grid md:grid-cols-[1fr_1fr] gap-6' : ''}"
+					style={current.layout === 'text-right' ? 'direction: rtl' : ''}>
 					<!-- Text content -->
-					<div>
+					<div style={current.layout === 'text-right' ? 'direction: ltr' : ''}>
 						{#if current.type === 'about'}
 							<div class="bg-rosys-card rounded-2xl {c.border} border p-6 shadow-sm">
 								<p class="text-[15px] text-rosys-fg leading-[1.85] mb-4">{p.about}</p>
@@ -213,15 +219,24 @@
 						{/if}
 					</div>
 
-					<!-- Illustration -->
-					{#if current.illustrationPage}
-						<div class="rounded-2xl overflow-hidden border border-rosys-border/40 shadow-sm bg-white">
-							<img
-								src={imgUrl(current.illustrationPage)}
-								alt="Illustration for {current.title}"
-								class="w-full h-auto"
-								loading="lazy"
-							/>
+					<!-- Illustration(s) -->
+					{#if current.layout !== 'text-only' && hasIllustration}
+						<div style={current.layout === 'text-right' ? 'direction: ltr' : ''}>
+							{#if current.illustrations && current.illustrations.length > 0}
+								<!-- Admin-uploaded illustrations -->
+								<div class="space-y-3">
+									{#each current.illustrations as url}
+										<div class="rounded-2xl overflow-hidden border border-rosys-border/40 shadow-sm bg-white">
+											<img src={url} alt="Illustration for {current.title}" class="w-full h-auto" loading="lazy" />
+										</div>
+									{/each}
+								</div>
+							{:else if current.pdfPage}
+								<!-- PDF page fallback -->
+								<div class="rounded-2xl overflow-hidden border border-rosys-border/40 shadow-sm bg-white">
+									<img src={pdfPageUrl(current.pdfPage)} alt="Illustration for {current.title}" class="w-full h-auto" loading="lazy" />
+								</div>
+							{/if}
 						</div>
 					{/if}
 				</div>
