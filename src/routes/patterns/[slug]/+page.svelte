@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ArrowLeft, Download, FileText, Box, Scissors, Play, ExternalLink, BookOpen, Ruler, Calculator } from 'lucide-svelte';
+	import { ArrowLeft, Download, FileText, Box, Scissors, Play, ExternalLink, BookOpen, Ruler, Calculator, Layers, MessageCircle } from 'lucide-svelte';
 
 	let { data } = $props();
 	const { pattern, tutorials, description, downloads, imageUrl } = data;
@@ -93,6 +93,29 @@
 						<p class="text-[12px] text-white/60">How much fabric do you need?</p>
 					</div>
 				</a>
+
+				<div class="grid grid-cols-2 gap-3">
+					<a
+						href="/patterns/{pattern.pattern_slug}/pieces"
+						class="flex items-center gap-3 p-3.5 bg-rosys-card border border-rosys-border/60 rounded-xl hover:border-rosys-fg/20 hover:shadow-sm transition-all group"
+					>
+						<Layers class="w-5 h-5 text-blue-500" strokeWidth={1.5} />
+						<div>
+							<p class="text-[13px] font-medium text-rosys-fg">Pattern Pieces</p>
+							<p class="text-[11px] text-rosys-fg-faint">Interactive viewer</p>
+						</div>
+					</a>
+					<a
+						href="/patterns/{pattern.pattern_slug}/help"
+						class="flex items-center gap-3 p-3.5 bg-rosys-card border border-rosys-border/60 rounded-xl hover:border-violet-300 hover:shadow-sm transition-all group"
+					>
+						<MessageCircle class="w-5 h-5 text-violet-500" strokeWidth={1.5} />
+						<div>
+							<p class="text-[13px] font-medium text-rosys-fg">AI Helper</p>
+							<p class="text-[11px] text-rosys-fg-faint">Ask anything</p>
+						</div>
+					</a>
+				</div>
 			</div>
 
 			<!-- Downloads -->
