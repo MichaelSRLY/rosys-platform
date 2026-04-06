@@ -54,8 +54,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 		throw redirect(303, '/login');
 	}
 
-	// Admin route protection
-	if (event.url.pathname.startsWith('/admin') && session?.user) {
+	// Admin route protection (both /admin pages and /api/admin endpoints)
+	const isAdminRoute = event.url.pathname.startsWith('/admin') || event.url.pathname.startsWith('/api/admin');
+	if (isAdminRoute && session?.user) {
 		const { data: adminRow } = await supabase
 			.from('admin_access')
 			.select('id')
