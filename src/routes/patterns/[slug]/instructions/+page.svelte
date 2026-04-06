@@ -1,153 +1,51 @@
 <script lang="ts">
-	import { ArrowLeft, BookOpen, Ruler, Scissors, ChevronLeft, ChevronRight, Package, ListOrdered, Info, CheckCircle2 } from 'lucide-svelte';
+	import { ArrowLeft, BookOpen, Scissors, Ruler, Package, Palette, Printer, LayoutGrid, ChevronRight, Shirt, Info } from 'lucide-svelte';
 
 	let { data } = $props();
-	const { pattern, sections, sizeChart } = data;
+	const { pattern, parsed, sizeChartRaw } = data;
+	const p = parsed;
 
-	let currentSection = $state(0);
 	let showSizeChart = $state(false);
-	let showToc = $state(false);
+	let showTableOfContents = $state(false);
 
-	const total = sections.length;
-	const progress = $derived(((currentSection + 1) / total) * 100);
-
-	function next() { if (currentSection < total - 1) currentSection++; }
-	function prev() { if (currentSection > 0) currentSection--; }
-	function goTo(i: number) { currentSection = i; showToc = false; }
-
-	function titleCase(str: string): string {
-		if (str === str.toUpperCase() && str.length > 3) {
-			return str.split(' ').map(w =>
-				w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
-			).join(' ');
-		}
-		return str;
+	// Build sections from parsed data — each becomes a visual card
+	interface Section {
+		id: string;
+		title: string;
+		icon: typeof BookOpen;
+		color: string;
+		type: 'about' | 'materials' | 'fabric' | 'pieces' | 'steps' | 'printing' | 'usage' | 'info';
 	}
 
-	const sectionIcon = (type: string) => {
-		switch (type) {
-			case 'step': return Scissors;
-			case 'materials': return Package;
-			default: return BookOpen;
-		}
+	const sections: Section[] = [
+		...(p.about ? [{ id: 'about', title: 'About This Pattern', icon: Info, color: 'violet', type: 'about' as const }] : []),
+		...(p.materials.length > 0 ? [{ id: 'materials', title: 'You Will Need', icon: Package, color: 'blue', type: 'materials' as const }] : []),
+		...(p.fabricSuggestions.length > 0 ? [{ id: 'fabrics', title: 'Fabric Suggestions', icon: Palette, color: 'rose', type: 'fabric' as const }] : []),
+		...(p.patternPieces.length > 0 ? [{ id: 'pieces', title: `Pattern Pieces (${p.patternPieces.length})`, icon: Scissors, color: 'amber', type: 'pieces' as const }] : []),
+		...(p.printingNotes ? [{ id: 'printing', title: 'Printing & Assembly', icon: Printer, color: 'slate', type: 'printing' as const }] : []),
+		...(p.fabricUsage ? [{ id: 'usage', title: 'Fabric Layout', icon: LayoutGrid, color: 'emerald', type: 'usage' as const }] : []),
+		...(p.sewingSteps.length > 0 ? p.sewingSteps.map((s, i) => ({
+			id: `step-${s.number}`,
+			title: s.title || `Step ${s.number}`,
+			icon: Shirt,
+			color: 'pink',
+			type: 'steps' as const
+		})) : [])
+	];
+
+	const colorMap: Record<string, { bg: string; text: string; border: string; badge: string }> = {
+		violet: { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200/60', badge: 'bg-violet-100 text-violet-700' },
+		blue: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200/60', badge: 'bg-blue-100 text-blue-700' },
+		rose: { bg: 'bg-rose-50', text: 'text-rose-600', border: 'border-rose-200/60', badge: 'bg-rose-100 text-rose-700' },
+		amber: { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200/60', badge: 'bg-amber-100 text-amber-700' },
+		slate: { bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200/60', badge: 'bg-slate-100 text-slate-700' },
+		emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200/60', badge: 'bg-emerald-100 text-emerald-700' },
+		pink: { bg: 'bg-pink-50', text: 'text-pink-600', border: 'border-pink-200/60', badge: 'bg-pink-100 text-pink-700' }
 	};
 
-	const sectionIconBg = (type: string) => {
-		switch (type) {
-			case 'step': return 'bg-rosys-50 text-rosys-500';
-			case 'materials': return 'bg-emerald-50 text-emerald-500';
-			default: return 'bg-warm-100 text-rosys-fg/40';
-		}
-	};
-
-	interface RichLine {
-		kind: 'text' | 'numbered' | 'bullet' | 'heading' | 'table-row' | 'empty' | 'dash-item' | 'note';
-		text: string;
-		num?: string;
-		cols?: string[];
-		label?: string;
-		desc?: string;
-	}
-
-	function parseContent(raw: string): RichLine[] {
-		const lines = raw.split('\n');
-		const result: RichLine[] = [];
-
-		for (const line of lines) {
-			const trimmed = line.trim();
-
-			if (!trimmed) {
-				if (result.length > 0 && result[result.length - 1].kind !== 'empty') {
-					result.push({ kind: 'empty', text: '' });
-				}
-				continue;
-			}
-
-			if (/^\d+(\s+\d+)*$/.test(trimmed) && trimmed.length < 20) continue;
-
-			const noteMatch = trimmed.match(/^(NOTE|TIP|IMPORTANT|WARNING)\s*:\s*(.+)/i);
-			if (noteMatch) {
-				result.push({ kind: 'note', text: noteMatch[2], label: noteMatch[1].toUpperCase() });
-				continue;
-			}
-
-			const numMatch = trimmed.match(/^(\d+)\.\s*(.+)/);
-			if (numMatch) {
-				result.push({ kind: 'numbered', text: numMatch[2], num: numMatch[1] });
-				continue;
-			}
-
-			if (trimmed.startsWith('- ') || trimmed.startsWith('• ') || trimmed.startsWith('* ')) {
-				result.push({ kind: 'bullet', text: trimmed.slice(2) });
-				continue;
-			}
-
-			const dashItem = trimmed.match(/^(.+?)\s+[–—-]\s+(.+)$/);
-			if (dashItem && dashItem[1].length < 50 && dashItem[2].length > 10) {
-				result.push({ kind: 'dash-item', text: trimmed, label: dashItem[1], desc: dashItem[2] });
-				continue;
-			}
-
-			if (
-				trimmed === trimmed.toUpperCase() &&
-				trimmed.length < 60 &&
-				trimmed.length > 3 &&
-				!trimmed.match(/^\d/) &&
-				!trimmed.includes(':')
-			) {
-				result.push({ kind: 'heading', text: titleCase(trimmed) });
-				continue;
-			}
-
-			const sizeRow = trimmed.match(/^(Size|Bust|Waist|Hip|Chest|Shoulder|Sleeve\s*Length|Full\s*Length|Bottom\s*Sweep|Back\s*Width|Arm\s*Hole)\s+(.+)/i);
-			if (sizeRow) {
-				const vals = sizeRow[2].trim().split(/\s+/);
-				if (vals.length >= 3 && vals.every(v => /^[\d.]+$/.test(v) || /^[XSML2]+$/.test(v.toUpperCase()))) {
-					result.push({ kind: 'table-row', text: trimmed, cols: [sizeRow[1], ...vals] });
-					continue;
-				}
-			}
-
-			const tabCols = trimmed.split(/\t+/);
-			if (tabCols.length >= 3) {
-				result.push({ kind: 'table-row', text: trimmed, cols: tabCols });
-				continue;
-			}
-
-			const kvMatch = trimmed.match(/^(.+?):\s+(.+)$/);
-			if (kvMatch && kvMatch[1].length < 40) {
-				result.push({ kind: 'text', text: trimmed, label: kvMatch[1], desc: kvMatch[2] });
-				continue;
-			}
-
-			result.push({ kind: 'text', text: trimmed });
-		}
-
-		return result;
-	}
-
-	interface TableGroup { kind: 'table'; rows: RichLine[] }
-	type GroupedItem = RichLine | TableGroup;
-
-	function groupTableRows(lines: RichLine[]): GroupedItem[] {
-		const result: GroupedItem[] = [];
-		let tableBuffer: RichLine[] = [];
-
-		for (const line of lines) {
-			if (line.kind === 'table-row') {
-				tableBuffer.push(line);
-			} else {
-				if (tableBuffer.length > 0) {
-					result.push({ kind: 'table', rows: [...tableBuffer] });
-					tableBuffer = [];
-				}
-				result.push(line);
-			}
-		}
-		if (tableBuffer.length > 0) {
-			result.push({ kind: 'table', rows: [...tableBuffer] });
-		}
-		return result;
+	function scrollTo(id: string) {
+		document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		showTableOfContents = false;
 	}
 </script>
 
@@ -155,81 +53,45 @@
 	<title>Instructions — {pattern.pattern_name}</title>
 </svelte:head>
 
-<div class="page-enter h-full flex flex-col bg-warm-50">
-	<!-- Top bar -->
-	<div class="shrink-0 glass border-b border-rosys-border/30 px-5 py-3 z-20">
-		<div class="flex items-center justify-between max-w-3xl mx-auto">
-			<a href="/patterns/{pattern.pattern_slug}" class="flex items-center gap-1.5 text-rosys-fg-faint hover:text-rosys-600 text-[13px] font-medium transition-colors">
+<div class="page-enter">
+	<!-- Sticky header -->
+	<div class="sticky top-0 z-20 glass border-b border-rosys-border/30">
+		<div class="max-w-3xl mx-auto px-5 py-3 flex items-center justify-between">
+			<a href="/patterns/{pattern.pattern_slug}" class="flex items-center gap-1.5 text-rosys-fg-faint hover:text-rosys-fg text-[13px] font-medium transition-colors">
 				<ArrowLeft class="w-4 h-4" strokeWidth={1.5} />
-				<span class="hidden sm:inline">{pattern.pattern_name}</span>
-				<span class="sm:hidden">Back</span>
+				{pattern.pattern_name}
 			</a>
 			<div class="flex items-center gap-2">
 				<button
 					type="button"
-					class="px-2.5 py-1.5 rounded-lg text-[12px] font-medium transition-all
-						{showToc ? 'bg-rosys-500 text-white shadow-sm' : 'bg-warm-100 text-rosys-fg-muted hover:text-rosys-fg hover:bg-warm-200'}"
-					onclick={() => { showToc = !showToc; showSizeChart = false; }}
-				>
-					<span class="flex items-center gap-1.5">
-						<ListOrdered class="w-3.5 h-3.5" strokeWidth={1.5} />
-						<span class="hidden sm:inline">Contents</span>
-					</span>
-				</button>
-				{#if sizeChart}
-					<button
-						type="button"
-						class="px-2.5 py-1.5 rounded-lg text-[12px] font-medium transition-all
-							{showSizeChart ? 'bg-rosys-500 text-white shadow-sm' : 'bg-warm-100 text-rosys-fg-muted hover:text-rosys-fg hover:bg-warm-200'}"
-						onclick={() => { showSizeChart = !showSizeChart; showToc = false; }}
-					>
-						<span class="flex items-center gap-1.5">
-							<Ruler class="w-3.5 h-3.5" strokeWidth={1.5} />
-							Sizes
-						</span>
-					</button>
-				{/if}
-				<span class="text-[12px] text-rosys-fg-faint tabular-nums ml-1 bg-warm-50 px-2 py-0.5 rounded-md">{currentSection + 1} / {total}</span>
-			</div>
-		</div>
-		<!-- Progress bar -->
-		<div class="max-w-3xl mx-auto mt-2.5">
-			<div class="w-full bg-warm-100 rounded-full h-[3px]">
-				<div
-					class="bg-gradient-to-r from-rosys-400 to-rosys-500 h-[3px] rounded-full transition-all duration-500 ease-out"
-					style="width: {progress}%"
-				></div>
+					onclick={() => (showTableOfContents = !showTableOfContents)}
+					class="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all
+						{showTableOfContents ? 'bg-rosys-fg text-white' : 'bg-rosys-bg-alt text-rosys-fg-muted hover:text-rosys-fg'}"
+				>Contents</button>
+				<button
+					type="button"
+					onclick={() => (showSizeChart = !showSizeChart)}
+					class="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all
+						{showSizeChart ? 'bg-rosys-fg text-white' : 'bg-rosys-bg-alt text-rosys-fg-muted hover:text-rosys-fg'}"
+				>Sizes</button>
 			</div>
 		</div>
 	</div>
 
-	<!-- TOC overlay -->
-	{#if showToc}
-		<div class="shrink-0 bg-white/95 backdrop-blur-md border-b border-rosys-border/30 px-5 py-4 overflow-y-auto max-h-[55vh] z-10 shadow-lg shadow-black/[0.03]">
-			<div class="max-w-3xl mx-auto">
-				<h3 class="text-[11px] font-semibold text-rosys-fg-faint uppercase tracking-[0.1em] mb-3">Table of Contents</h3>
-				<div class="grid gap-0.5">
-					{#each sections as sec, i}
+	<!-- Table of Contents dropdown -->
+	{#if showTableOfContents}
+		<div class="sticky top-[52px] z-10 bg-rosys-card border-b border-rosys-border/30 shadow-sm">
+			<div class="max-w-3xl mx-auto px-5 py-4">
+				<div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+					{#each sections as section}
+						{@const c = colorMap[section.color]}
 						<button
 							type="button"
-							class="text-left flex items-center gap-3 px-3 py-2 rounded-xl transition-all text-[13px]
-								{i === currentSection
-								? 'bg-rosys-50 text-rosys-700 font-medium'
-								: 'text-rosys-fg-muted hover:bg-warm-50 hover:text-rosys-fg'}"
-							onclick={() => goTo(i)}
+							onclick={() => scrollTo(section.id)}
+							class="flex items-center gap-2 px-3 py-2 rounded-lg text-left hover:bg-rosys-bg-alt transition-colors"
 						>
-							<span class="w-6 h-6 rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0
-								{i < currentSection ? 'bg-emerald-50 text-emerald-500' : i === currentSection ? 'bg-rosys-100 text-rosys-600' : 'bg-warm-100 text-rosys-fg-faint'}">
-								{#if i < currentSection}
-									<CheckCircle2 class="w-3.5 h-3.5" strokeWidth={2} />
-								{:else}
-									{i + 1}
-								{/if}
-							</span>
-							<span class="truncate">{titleCase(sec.title)}</span>
-							{#if !sec.content}
-								<span class="text-[10px] text-rosys-fg-faint/40 ml-auto shrink-0">header</span>
-							{/if}
+							<span class="w-2 h-2 rounded-full {c.bg} shrink-0"></span>
+							<span class="text-[12px] text-rosys-fg-muted truncate">{section.title}</span>
 						</button>
 					{/each}
 				</div>
@@ -238,165 +100,179 @@
 	{/if}
 
 	<!-- Size chart overlay -->
-	{#if showSizeChart && sizeChart}
-		<div class="shrink-0 bg-white/95 backdrop-blur-md border-b border-rosys-border/30 px-5 py-4 overflow-x-auto z-10 shadow-lg shadow-black/[0.03]">
-			<div class="max-w-3xl mx-auto">
-				<h3 class="text-[11px] font-semibold text-rosys-fg-faint uppercase tracking-[0.1em] mb-3">Size Chart</h3>
-				<div class="text-[12px] text-rosys-fg-muted whitespace-pre leading-relaxed font-mono bg-warm-50 rounded-xl p-4 border border-rosys-border/30">
-					{sizeChart}
-				</div>
+	{#if showSizeChart && sizeChartRaw}
+		<div class="sticky top-[52px] z-10 bg-rosys-card border-b border-rosys-border/30 shadow-sm">
+			<div class="max-w-3xl mx-auto px-5 py-4 overflow-x-auto">
+				{#if p.sizeChart}
+					<table class="w-full text-[12px]">
+						<thead>
+							<tr class="border-b border-rosys-border/40">
+								<th class="text-left py-1.5 pr-3 text-rosys-fg-faint font-medium"></th>
+								{#each p.sizeChart.sizes as size}
+									<th class="text-center py-1.5 px-2 text-rosys-fg font-semibold">{size}</th>
+								{/each}
+							</tr>
+						</thead>
+						<tbody>
+							{#each p.sizeChart.measurements as row}
+								<tr class="border-b border-rosys-border/20">
+									<td class="py-1.5 pr-3 text-rosys-fg-muted font-medium">{row.label}</td>
+									{#each row.values as val}
+										<td class="text-center py-1.5 px-2 text-rosys-fg tabular-nums">{val}</td>
+									{/each}
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				{:else}
+					<pre class="text-[12px] text-rosys-fg-muted font-mono whitespace-pre-line">{sizeChartRaw}</pre>
+				{/if}
 			</div>
 		</div>
 	{/if}
 
 	<!-- Content -->
-	<div class="flex-1 overflow-auto">
-		<div class="max-w-3xl mx-auto px-5 sm:px-8 py-8 md:py-12">
-			{#key currentSection}
-				{@const section = sections[currentSection]}
-				{@const Icon = sectionIcon(section.type)}
-				{@const parsed = parseContent(section.content)}
-				{@const grouped = groupTableRows(parsed)}
-				<div class="page-enter">
-					<!-- Section header -->
-					<div class="flex items-start gap-3.5 mb-8">
-						<div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 {sectionIconBg(section.type)}">
-							<Icon class="w-5 h-5" strokeWidth={1.5} />
-						</div>
-						<div>
-							<h2 class="text-rosys-fg text-[20px] md:text-[24px] font-bold tracking-[-0.02em] leading-tight">
-								{titleCase(section.title)}
-							</h2>
-							<p class="text-[12px] text-rosys-fg-faint mt-1">Section {currentSection + 1} of {total}</p>
-						</div>
+	<div class="max-w-3xl mx-auto px-5 py-8 space-y-6">
+
+		<!-- ABOUT card -->
+		{#if p.about}
+			<div id="about" class="bg-rosys-card rounded-2xl border border-violet-200/40 p-6 shadow-sm">
+				<div class="flex items-center gap-3 mb-4">
+					<div class="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center">
+						<Info class="w-5 h-5 text-violet-500" strokeWidth={1.5} />
 					</div>
-
-					<!-- Rich content -->
-					{#if section.content}
-						<div class="instruction-content space-y-1">
-							{#each grouped as item}
-								{#if 'rows' in item && item.kind === 'table'}
-									<!-- Table -->
-									<div class="my-5 overflow-x-auto rounded-xl border border-rosys-border/40 bg-white">
-										<table class="w-full text-[13px]">
-											{#each item.rows as row, ri}
-												<tr class="{ri === 0 ? 'bg-rosys-50/60' : ri % 2 === 0 ? 'bg-warm-50/30' : ''} border-b border-rosys-border/15 last:border-b-0">
-													{#each (row as RichLine).cols || [] as cell, ci}
-														{#if ri === 0}
-															<th class="px-3 py-2.5 text-left text-[11px] uppercase tracking-wider text-rosys-fg-muted font-semibold">{cell.trim()}</th>
-														{:else if ci === 0}
-															<td class="px-3 py-2 text-rosys-fg font-medium">{cell.trim()}</td>
-														{:else}
-															<td class="px-3 py-2 text-rosys-fg-secondary tabular-nums">{cell.trim()}</td>
-														{/if}
-													{/each}
-												</tr>
-											{/each}
-										</table>
-									</div>
-								{:else if (item as RichLine).kind === 'heading'}
-									<h3 class="text-[15px] font-semibold text-rosys-fg pt-5 pb-1 tracking-[-0.01em]">
-										{(item as RichLine).text}
-									</h3>
-								{:else if (item as RichLine).kind === 'note'}
-									<div class="my-4 flex gap-3 px-4 py-3 rounded-xl bg-amber-50/80 border border-amber-200/50">
-										<Info class="w-4 h-4 text-amber-600 shrink-0 mt-0.5" strokeWidth={1.5} />
-										<div>
-											<span class="text-[11px] font-bold uppercase tracking-wider text-amber-700">{(item as RichLine).label}</span>
-											<p class="text-[13px] text-amber-900/80 leading-relaxed mt-0.5">{(item as RichLine).text}</p>
-										</div>
-									</div>
-								{:else if (item as RichLine).kind === 'numbered'}
-									{@const numLine = item as RichLine}
-									{@const hasDash = numLine.text.match(/^(.+?)\s+[–—-]\s+(.+)$/)}
-									<div class="flex gap-3 py-1.5">
-										<span class="w-6 h-6 rounded-lg bg-rosys-50 text-rosys-600 flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5">{numLine.num}</span>
-										<p class="text-[14px] text-rosys-fg-secondary leading-relaxed flex-1">
-											{#if hasDash}
-												<span class="font-medium text-rosys-fg">{hasDash[1]}</span> — {hasDash[2]}
-											{:else}
-												{numLine.text}
-											{/if}
-										</p>
-									</div>
-								{:else if (item as RichLine).kind === 'dash-item'}
-									<div class="flex gap-3 py-2 px-4 rounded-xl bg-white border border-rosys-border/25 my-1.5">
-										<div class="w-1.5 h-1.5 rounded-full bg-rosys-300 mt-2.5 shrink-0"></div>
-										<p class="text-[14px] leading-relaxed flex-1">
-											<span class="font-medium text-rosys-fg">{(item as RichLine).label}</span>
-											<span class="text-rosys-fg-muted"> — </span>
-											<span class="text-rosys-fg-secondary">{(item as RichLine).desc}</span>
-										</p>
-									</div>
-								{:else if (item as RichLine).kind === 'bullet'}
-									<div class="flex gap-3 py-0.5 pl-1">
-										<span class="w-1.5 h-1.5 rounded-full bg-rosys-300 mt-2.5 shrink-0"></span>
-										<p class="text-[14px] text-rosys-fg-secondary leading-relaxed flex-1">{(item as RichLine).text}</p>
-									</div>
-								{:else if (item as RichLine).kind === 'empty'}
-									<div class="h-3"></div>
-								{:else}
-									{@const textLine = item as RichLine}
-									<p class="text-[14px] md:text-[15px] text-rosys-fg-secondary leading-[1.8]">
-										{#if textLine.label && textLine.desc}
-											<span class="font-medium text-rosys-fg">{textLine.label}:</span> {textLine.desc}
-										{:else}
-											{textLine.text}
-										{/if}
-									</p>
-								{/if}
-							{/each}
-						</div>
-					{:else}
-						<div class="flex flex-col items-center py-16 text-center">
-							<div class="w-14 h-14 rounded-2xl bg-warm-100 flex items-center justify-center mb-4">
-								<Info class="w-6 h-6 text-rosys-fg-faint/30" strokeWidth={1.5} />
-							</div>
-							<p class="text-[14px] text-rosys-fg-faint font-medium">Section header</p>
-							<p class="text-[12px] text-rosys-fg-faint/50 mt-1 max-w-xs">This section marks a new part of the instructions. Tap Next to continue.</p>
-						</div>
-					{/if}
+					<div>
+						<h2 class="text-[16px] font-semibold text-rosys-fg">About This Pattern</h2>
+						{#if p.difficulty}
+							<span class="text-[11px] font-medium px-2 py-0.5 rounded-md bg-violet-100 text-violet-700">{p.difficulty}</span>
+						{/if}
+					</div>
 				</div>
-			{/key}
-		</div>
-	</div>
-
-	<!-- Navigation footer -->
-	<div class="shrink-0 glass border-t border-rosys-border/30 px-5 py-3.5">
-		<div class="max-w-3xl mx-auto flex items-center justify-between">
-			<button
-				type="button"
-				disabled={currentSection === 0}
-				onclick={prev}
-				class="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-medium transition-all
-					{currentSection === 0 ? 'text-rosys-fg-faint/25 cursor-default' : 'text-rosys-fg hover:bg-warm-100 active:scale-[0.97]'}"
-			>
-				<ChevronLeft class="w-4 h-4" strokeWidth={1.5} />
-				<span class="hidden sm:inline">Previous</span>
-			</button>
-
-			<!-- Compact progress dots -->
-			<div class="flex gap-[3px] max-w-[200px] sm:max-w-[280px] overflow-hidden items-center justify-center">
-				{#each sections as _, i}
-					<button
-						type="button"
-						onclick={() => (currentSection = i)}
-						class="h-[6px] rounded-full transition-all duration-300 shrink-0
-							{i === currentSection ? 'bg-rosys-500 w-5' : i < currentSection ? 'bg-rosys-300 w-[6px]' : 'bg-rosys-200/60 w-[6px]'}"
-					></button>
-				{/each}
+				<p class="text-[14px] text-rosys-fg-muted leading-[1.8]">{p.about}</p>
+				{#if p.seamAllowance}
+					<div class="mt-4 pt-3 border-t border-rosys-border/30">
+						<p class="text-[12px] text-rosys-fg-faint"><strong class="text-rosys-fg-muted">Seam Allowance:</strong> {p.seamAllowance}</p>
+					</div>
+				{/if}
 			</div>
+		{/if}
 
-			<button
-				type="button"
-				disabled={currentSection === total - 1}
-				onclick={next}
-				class="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-medium transition-all
-					{currentSection === total - 1 ? 'text-rosys-fg-faint/25 cursor-default' : 'rosys-btn-primary text-white'}"
-			>
-				<span class="hidden sm:inline">Next</span>
-				<ChevronRight class="w-4 h-4" strokeWidth={1.5} />
-			</button>
-		</div>
+		<!-- MATERIALS card -->
+		{#if p.materials.length > 0}
+			<div id="materials" class="bg-rosys-card rounded-2xl border border-blue-200/40 p-6 shadow-sm">
+				<div class="flex items-center gap-3 mb-4">
+					<div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+						<Package class="w-5 h-5 text-blue-500" strokeWidth={1.5} />
+					</div>
+					<h2 class="text-[16px] font-semibold text-rosys-fg">You Will Need</h2>
+				</div>
+				<div class="space-y-0">
+					{#each p.materials as mat, i}
+						<div class="flex items-center justify-between py-3 {i < p.materials.length - 1 ? 'border-b border-rosys-border/20' : ''}">
+							<div class="flex items-center gap-3">
+								<span class="w-6 h-6 rounded-md bg-blue-50 flex items-center justify-center text-[11px] font-bold text-blue-400 shrink-0">{i + 1}</span>
+								<span class="text-[14px] text-rosys-fg">{mat.item}</span>
+							</div>
+							{#if mat.quantity}
+								<span class="text-[13px] text-blue-600 font-semibold bg-blue-50 px-2.5 py-1 rounded-lg shrink-0 ml-3">{mat.quantity}</span>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
+		<!-- FABRIC SUGGESTIONS card -->
+		{#if p.fabricSuggestions.length > 0}
+			<div id="fabrics" class="bg-rosys-card rounded-2xl border border-rose-200/40 p-6 shadow-sm">
+				<div class="flex items-center gap-3 mb-4">
+					<div class="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">
+						<Palette class="w-5 h-5 text-rose-500" strokeWidth={1.5} />
+					</div>
+					<h2 class="text-[16px] font-semibold text-rosys-fg">Fabric Suggestions</h2>
+				</div>
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+					{#each p.fabricSuggestions as fab}
+						<div class="flex items-start gap-2.5 p-3 rounded-xl bg-rose-50/50">
+							<span class="w-1.5 h-1.5 rounded-full bg-rose-400 mt-2 shrink-0"></span>
+							<p class="text-[13px] text-rosys-fg-muted leading-relaxed">{fab}</p>
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
+		<!-- PATTERN PIECES card -->
+		{#if p.patternPieces.length > 0}
+			<div id="pieces" class="bg-rosys-card rounded-2xl border border-amber-200/40 p-6 shadow-sm">
+				<div class="flex items-center gap-3 mb-4">
+					<div class="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
+						<Scissors class="w-5 h-5 text-amber-500" strokeWidth={1.5} />
+					</div>
+					<h2 class="text-[16px] font-semibold text-rosys-fg">Pattern Pieces</h2>
+					<span class="text-[12px] font-medium px-2.5 py-0.5 rounded-lg bg-amber-100 text-amber-700">{p.patternPieces.length} pieces</span>
+				</div>
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+					{#each p.patternPieces as piece}
+						<div class="flex items-center gap-3 p-3 rounded-xl bg-amber-50/50 border border-amber-100/60">
+							<span class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-[13px] font-bold text-amber-700 shrink-0">{piece.number}</span>
+							<div class="min-w-0">
+								<p class="text-[13px] font-medium text-rosys-fg">{piece.name}</p>
+								<p class="text-[11px] text-amber-600/70">{piece.cutInstructions}</p>
+							</div>
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
+		<!-- PRINTING NOTES card -->
+		{#if p.printingNotes}
+			<div id="printing" class="bg-rosys-card rounded-2xl border border-slate-200/40 p-6 shadow-sm">
+				<div class="flex items-center gap-3 mb-4">
+					<div class="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center">
+						<Printer class="w-5 h-5 text-slate-500" strokeWidth={1.5} />
+					</div>
+					<h2 class="text-[16px] font-semibold text-rosys-fg">Printing & Assembly</h2>
+				</div>
+				<p class="text-[14px] text-rosys-fg-muted leading-[1.75] whitespace-pre-line">{p.printingNotes}</p>
+			</div>
+		{/if}
+
+		<!-- FABRIC LAYOUT card -->
+		{#if p.fabricUsage}
+			<div id="usage" class="bg-rosys-card rounded-2xl border border-emerald-200/40 p-6 shadow-sm">
+				<div class="flex items-center gap-3 mb-4">
+					<div class="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+						<LayoutGrid class="w-5 h-5 text-emerald-500" strokeWidth={1.5} />
+					</div>
+					<h2 class="text-[16px] font-semibold text-rosys-fg">Fabric Layout</h2>
+				</div>
+				<p class="text-[14px] text-rosys-fg-muted leading-[1.75] whitespace-pre-line">{p.fabricUsage}</p>
+			</div>
+		{/if}
+
+		<!-- SEWING STEPS -->
+		{#if p.sewingSteps.length > 0}
+			<div class="pt-4">
+				<h2 class="text-[20px] font-bold text-rosys-fg mb-6 flex items-center gap-3">
+					<Shirt class="w-6 h-6 text-pink-500" strokeWidth={1.5} />
+					Sewing Steps
+				</h2>
+				<div class="space-y-4">
+					{#each p.sewingSteps as step}
+						<div id="step-{step.number}" class="bg-rosys-card rounded-2xl border border-pink-200/40 p-6 shadow-sm">
+							<div class="flex items-start gap-4">
+								<span class="w-10 h-10 rounded-xl bg-pink-100 flex items-center justify-center text-[16px] font-bold text-pink-600 shrink-0">{step.number}</span>
+								<div class="flex-1 min-w-0">
+									<h3 class="text-[15px] font-semibold text-rosys-fg mb-2">{step.title}</h3>
+									<p class="text-[14px] text-rosys-fg-muted leading-[1.8] whitespace-pre-line">{step.content}</p>
+								</div>
+							</div>
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
 	</div>
 </div>
