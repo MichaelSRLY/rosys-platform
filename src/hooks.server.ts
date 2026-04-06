@@ -54,6 +54,20 @@ export const handle: Handle = async ({ event, resolve }) => {
 		throw redirect(303, '/login');
 	}
 
+	// Admin route protection
+	if (event.url.pathname.startsWith('/admin') && session?.user) {
+		const { data: adminRow } = await supabase
+			.from('admin_access')
+			.select('id')
+			.eq('user_id', session.user.id)
+			.single();
+
+		if (!adminRow) {
+			throw error(403, 'Admin access required');
+		}
+		event.locals.isAdmin = true;
+	}
+
 	return resolve(event, {
 		filterSerializedResponseHeaders(name) {
 			return name === 'content-range' || name === 'x-supabase-api-version';

@@ -11,12 +11,7 @@ export interface Pattern {
 	old_name: string | null;
 }
 
-// Free patterns by month — add new entries each edition
-// Key: 'YYYY-MM', Value: pattern slugs available that month
-const FREE_PATTERNS_BY_MONTH: Record<string, string[]> = {
-	'2026-04': ['121_aylani_coat', '115_tereza_set']
-	// Future: '2026-05': ['xxx_pattern_slug']
-};
+// Free patterns now managed via admin panel (free_pattern_rounds table in Supabase)
 
 export async function getAllPatterns(): Promise<Pattern[]> {
 	return query<Pattern>(
@@ -66,35 +61,34 @@ export function matchProductsToPatterns(
 
 /**
  * Get free patterns a user is entitled to based on their signup date.
- * Users get patterns from their signup month onward (up to current month).
+ * Reads from free_pattern_rounds table (managed via admin panel).
+ * Users get patterns from rounds that were active during or after their signup.
  */
-export function getFreePatterns(
+export async function getFreePatterns(
 	signupDate: string | null,
-	allPatterns: Pattern[]
-): Pattern[] {
-	const now = new Date();
-	const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+	allPatterns: Pattern[],
+	supabase: any
+): Promise<Pattern[]> {
+	// Get all active rounds, plus rounds that started after user signup
+	const { data: rounds } = await supabase
+		.from('free_pattern_rounds')
+		.select('pattern_slugs, starts_at, is_active')
+		.order('starts_at', { ascending: false });
 
-	if (!signupDate) {
-		// No signup date — only current month
-		const slugs = FREE_PATTERNS_BY_MONTH[currentKey] || [];
-		return allPatterns.filter((p) => slugs.includes(p.pattern_slug));
+	if (!rounds || rounds.length === 0) return [];
+
+	const signup = signupDate ? new Date(signupDate) : new Date();
+	const entitled = new Set<string>();
+
+	for (const round of rounds) {
+		const roundStart = new Date(round.starts_at);
+		// User gets patterns from rounds that started during or after their membership
+		if (round.is_active || roundStart >= signup) {
+			for (const slug of round.pattern_slugs || []) {
+				entitled.add(slug);
+			}
+		}
 	}
 
-	const signup = new Date(signupDate);
-	const entitled: string[] = [];
-
-	// Walk from signup month to current month
-	const cursor = new Date(signup.getFullYear(), signup.getMonth(), 1);
-	const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-	while (cursor <= end) {
-		const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`;
-		const slugs = FREE_PATTERNS_BY_MONTH[key] || [];
-		entitled.push(...slugs);
-		cursor.setMonth(cursor.getMonth() + 1);
-	}
-
-	const uniqueSlugs = [...new Set(entitled)];
-	return allPatterns.filter((p) => uniqueSlugs.includes(p.pattern_slug));
+	return allPatterns.filter((p) => entitled.has(p.pattern_slug));
 }

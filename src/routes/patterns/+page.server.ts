@@ -26,7 +26,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			.eq('id', session.user.id)
 			.single();
 
-		freePatterns = getFreePatterns(profile?.created_at || null, allPatterns);
+		freePatterns = await getFreePatterns(profile?.created_at || null, allPatterns, locals.supabase);
 
 		const purchasedSlugs = new Set(purchasedPatterns.map((p) => p.pattern_slug));
 		freePatterns = freePatterns.filter((p) => !purchasedSlugs.has(p.pattern_slug));
