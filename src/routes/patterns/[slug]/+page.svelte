@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ArrowLeft, Download, FileText, Box, Scissors, Play, ExternalLink } from 'lucide-svelte';
+	import { ArrowLeft, Download, FileText, Box, Scissors, Play, ExternalLink, BookOpen } from 'lucide-svelte';
 
 	let { data } = $props();
 	const { pattern, tutorials, description, downloads, imageUrl } = data;
@@ -52,6 +52,22 @@
 			{#if description}
 				<p class="text-rosys-fg-muted text-[14px] leading-relaxed mb-8 max-w-lg">{description}</p>
 			{/if}
+
+			<!-- Quick Actions -->
+			<div class="mb-8">
+				<a
+					href="/patterns/{pattern.pattern_slug}/instructions"
+					class="flex items-center gap-4 p-4 bg-rosys-fg text-white rounded-xl hover:bg-rosys-fg/90 active:scale-[0.98] transition-all duration-150 group mb-4"
+				>
+					<div class="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+						<BookOpen class="w-5 h-5" strokeWidth={1.5} />
+					</div>
+					<div class="flex-1">
+						<p class="text-[15px] font-semibold">Read Instructions</p>
+						<p class="text-[12px] text-white/60">Interactive step-by-step guide</p>
+					</div>
+				</a>
+			</div>
 
 			<!-- Downloads -->
 			<div class="mb-8">

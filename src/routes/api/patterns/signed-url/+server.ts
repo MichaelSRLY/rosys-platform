@@ -1,14 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { createClient } from '@supabase/supabase-js';
-import { env } from '$env/dynamic/private';
-
-// Use service role key for signed URLs (bypasses RLS)
-function getAdminClient() {
-	const url = 'https://lahzrlyhojyfadjasdrc.supabase.co';
-	const key = env.SUPABASE_SERVICE_KEY || '';
-	return createClient(url, key);
-}
+import { signPatternUrls } from '$lib/storage.server';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.session) throw error(401, 'Not authenticated');
@@ -18,25 +10,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		throw error(400, 'paths array required');
 	}
 
-	// Limit to 20 URLs per request
-	const limitedPaths = paths.slice(0, 20);
-	const admin = getAdminClient();
+	// Validate and limit
+	const validPaths = paths
+		.filter((p): p is string => typeof p === 'string' && !p.includes('..'))
+		.slice(0, 20);
 
-	const results: Record<string, string | null> = {};
-
-	for (const path of limitedPaths) {
-		// Validate path is within pattern-files bucket
-		if (typeof path !== 'string' || path.includes('..')) {
-			results[path] = null;
-			continue;
-		}
-
-		const { data, error: signError } = await admin.storage
-			.from('pattern-files')
-			.createSignedUrl(path, 3600); // 1 hour expiry
-
-		results[path] = signError ? null : data.signedUrl;
-	}
-
-	return json({ urls: results });
+	const urls = await signPatternUrls(validPaths);
+	return json({ urls });
 };

@@ -1,12 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { env } from '$env/dynamic/private';
+import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 
 let adminClient: ReturnType<typeof createClient> | null = null;
 
 function getAdmin() {
 	if (!adminClient) {
 		adminClient = createClient(
-			'https://lahzrlyhojyfadjasdrc.supabase.co',
+			PUBLIC_SUPABASE_URL,
 			env.SUPABASE_SERVICE_KEY || ''
 		);
 	}
