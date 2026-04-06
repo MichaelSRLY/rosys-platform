@@ -12,7 +12,6 @@
 	const votesUsed = $derived(data.userVotes.length);
 	const votesLeft = $derived(data.maxVotes - votesUsed);
 
-	// Countdown
 	let timeLeft = $state('');
 	$effect(() => {
 		if (!data.period) return;
@@ -49,7 +48,6 @@
 		voting = false;
 	}
 
-	// Top 3 for scoreboard
 	const topDesigns = $derived(
 		[...data.designs]
 			.sort((a, b) => (b.vote_count || 0) - (a.vote_count || 0))
@@ -65,27 +63,25 @@
 	<!-- Header -->
 	<div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
 		<div>
-			<h1 class="font-[var(--font-logo)] italic text-rosys-fg text-[28px] font-light tracking-tight">Design Voting</h1>
-			<p class="text-rosys-fg-faint text-[14px] mt-1">{data.designs.length} designs · {data.maxVotes} votes per person</p>
+			<h1 class="text-rosys-fg text-[24px] md:text-[28px] font-bold tracking-[-0.03em]">Design Voting</h1>
+			<p class="text-rosys-fg-faint text-[13px] mt-1">{data.designs.length} designs · {data.maxVotes} votes per person</p>
 		</div>
 
 		{#if data.isVotingOpen}
 			<div class="flex items-center gap-4">
-				<!-- Timer -->
 				<div class="flex items-center gap-2 text-rosys-fg-faint">
 					<Clock class="w-4 h-4" strokeWidth={1.5} />
 					<span class="text-[13px] font-medium">{timeLeft} left</span>
 				</div>
 
-				<!-- Vote counter -->
-				<div class="bg-rosys-card rounded-xl px-4 py-2 border border-rosys-border/60 shadow-sm">
+				<div class="rosys-card px-4 py-2">
 					<div class="flex items-center gap-2">
-						<span class="text-[22px] font-bold text-rosys-fg">{votesUsed}</span>
+						<span class="text-[22px] font-bold text-rosys-600">{votesUsed}</span>
 						<span class="text-[13px] text-rosys-fg-faint">/ {data.maxVotes} used</span>
 					</div>
-					<div class="w-full bg-rosys-bg-alt rounded-full h-1.5 mt-1.5">
+					<div class="w-full bg-warm-100 rounded-full h-1.5 mt-1.5">
 						<div
-							class="bg-rosys-fg h-1.5 rounded-full transition-all duration-500"
+							class="bg-gradient-to-r from-rosys-400 to-rosys-500 h-1.5 rounded-full transition-all duration-500"
 							style="width: {(votesUsed / data.maxVotes) * 100}%"
 						></div>
 					</div>
@@ -96,14 +92,14 @@
 
 	{#if !data.isVotingOpen}
 		<!-- Results mode -->
-		<div class="mb-8 bg-rosys-card rounded-2xl p-6 border border-rosys-border/50 shadow-sm">
+		<div class="mb-8 rosys-card p-6">
 			<div class="flex items-center gap-2 mb-4">
 				<Trophy class="w-5 h-5 text-amber-500" strokeWidth={1.5} />
-				<h2 class="text-[17px] font-semibold text-rosys-fg">Results</h2>
+				<h2 class="text-[16px] font-semibold text-rosys-fg">Results</h2>
 			</div>
 			<div class="space-y-3">
 				{#each topDesigns as design, i}
-					<div class="flex items-center gap-4 p-3 rounded-xl {i === 0 ? 'bg-amber-50 border border-amber-200/60' : 'bg-rosys-bg'}">
+					<div class="flex items-center gap-4 p-3 rounded-xl {i === 0 ? 'bg-amber-50 border border-amber-200/60' : 'bg-warm-50'}">
 						<span class="w-8 h-8 rounded-full flex items-center justify-center text-[14px] font-bold
 							{i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-gray-300 text-white' : 'bg-amber-700 text-white'}">
 							{i + 1}
@@ -126,25 +122,23 @@
 		{#each data.designs as design (design.id)}
 			{@const voted = isVoted(design.id)}
 			<div
-				class="bg-rosys-card rounded-2xl overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04)] border transition-all duration-200
-					{voted ? 'border-rosys-fg shadow-[0_0_0_2px_rgba(46,42,57,0.15)]' : 'border-rosys-border/50 hover:shadow-md hover:-translate-y-0.5'}"
+				class="rosys-card overflow-hidden transition-all duration-200
+					{voted ? 'border-rosys-500 shadow-[0_0_0_2px_rgba(232,54,109,0.15)]' : 'hover:-translate-y-0.5'}"
 			>
-				<!-- Image -->
 				<button
 					type="button"
-					class="w-full aspect-square bg-rosys-bg-alt overflow-hidden cursor-pointer"
+					class="w-full aspect-square bg-warm-100 overflow-hidden cursor-pointer"
 					onclick={() => (selectedDesign = design)}
 				>
 					{#if design.image_url}
 						<img src={design.image_url} alt={design.title} class="w-full h-full object-cover" loading="lazy" />
 					{:else}
 						<div class="w-full h-full flex items-center justify-center">
-							<Vote class="w-8 h-8 text-rosys-fg/10" strokeWidth={1.5} />
+							<Vote class="w-8 h-8 text-rosys-200" strokeWidth={1.5} />
 						</div>
 					{/if}
 				</button>
 
-				<!-- Info + vote button -->
 				<div class="p-3 flex items-center justify-between">
 					<div class="min-w-0">
 						<p class="text-[12px] font-medium text-rosys-fg truncate">{design.title}</p>
@@ -158,8 +152,8 @@
 							onclick={() => toggleVote(design.id)}
 							class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all duration-200
 								{voted
-								? 'bg-rosys-fg text-white'
-								: 'bg-rosys-bg-alt text-rosys-fg-faint hover:bg-rosys-fg hover:text-white'}
+								? 'bg-rosys-500 text-white'
+								: 'bg-warm-100 text-rosys-fg-faint hover:bg-rosys-500 hover:text-white'}
 								disabled:opacity-30"
 						>
 							<Check class="w-4 h-4" strokeWidth={2} />
@@ -200,7 +194,7 @@
 						disabled={voting || (!voted && votesLeft <= 0)}
 						onclick={() => { if (selectedDesign) toggleVote(selectedDesign.id); }}
 						class="px-5 py-2.5 rounded-xl font-medium text-[14px] transition-all
-							{voted ? 'bg-white text-rosys-fg' : 'bg-rosys-accent text-rosys-fg hover:bg-rosys-accent-hover'}"
+							{voted ? 'bg-white text-rosys-fg' : 'rosys-btn-primary'}"
 					>
 						{voted ? 'Remove Vote' : 'Vote'}
 					</button>

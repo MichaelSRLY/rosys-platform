@@ -77,8 +77,10 @@
 	<!-- Header -->
 	<div class="sticky top-0 z-20 glass border-b border-rosys-border/30 px-5 py-3.5">
 		<div class="flex items-center gap-3">
-			<img src="/logowhite.png" alt="Rosys" class="w-7 h-7" />
-			<h1 class="font-[var(--font-logo)] italic text-rosys-fg text-[15px] tracking-[0.01em] font-medium">
+			<div class="w-7 h-7 rounded-lg bg-gradient-to-br from-rosys-500 to-rosys-600 flex items-center justify-center">
+				<img src="/logowhite.png" alt="Rosys" class="w-4 h-4 brightness-0 invert" />
+			</div>
+			<h1 class="text-rosys-fg text-[15px] tracking-[-0.01em] font-semibold">
 				{data.edition.title} Edition
 			</h1>
 		</div>
@@ -87,7 +89,7 @@
 	<!-- Pages feed -->
 	<div class="space-y-4 px-3 pt-4">
 		{#each data.pages as page (page.index)}
-			<div class="bg-rosys-card rounded-2xl overflow-hidden shadow-[0_1px_4px_rgba(0,0,0,0.06)] border border-rosys-border/40">
+			<div class="rosys-card overflow-hidden">
 				<!-- Page image -->
 				<button
 					type="button"
@@ -112,7 +114,7 @@
 					<button
 						type="button"
 						onclick={() => toggleLike(page.index)}
-						class="flex items-center gap-1.5 transition-colors {isLiked(page.index) ? 'text-rosys-pink' : 'text-rosys-fg-faint hover:text-rosys-pink'}"
+						class="flex items-center gap-1.5 transition-colors {isLiked(page.index) ? 'text-rosys-500' : 'text-rosys-fg-faint hover:text-rosys-500'}"
 					>
 						<Heart class="w-[22px] h-[22px]" strokeWidth={1.5} fill={isLiked(page.index) ? 'currentColor' : 'none'} />
 						{#if likeCount(page.index) > 0}
@@ -136,11 +138,11 @@
 
 				<!-- Comments section (inline) -->
 				{#if activeComments === page.index}
-					<div class="border-t border-rosys-border/50 px-4 py-3 space-y-3">
+					<div class="border-t border-rosys-border/40 px-4 py-3 space-y-3">
 						{#each data.commentsByPage[page.index] || [] as comment}
 							<div class="flex gap-2.5">
-								<div class="w-7 h-7 rounded-full bg-rosys-bg-alt flex items-center justify-center shrink-0 mt-0.5">
-									<span class="text-[11px] font-semibold text-rosys-fg/60">{comment.username[0]?.toUpperCase()}</span>
+								<div class="w-7 h-7 rounded-full bg-rosys-50 flex items-center justify-center shrink-0 mt-0.5">
+									<span class="text-[11px] font-semibold text-rosys-600">{comment.username[0]?.toUpperCase()}</span>
 								</div>
 								<div class="min-w-0">
 									<div class="flex items-baseline gap-2">
@@ -165,12 +167,12 @@
 								type="text"
 								bind:value={newComment}
 								placeholder="Add a comment..."
-								class="flex-1 px-3 py-2 rounded-xl bg-rosys-bg border-none text-[13px] text-rosys-fg placeholder-rosys-fg-faint/50 focus:outline-none focus:ring-2 focus:ring-rosys-fg/15"
+								class="flex-1 px-3 py-2 rounded-xl bg-warm-50 border border-rosys-border/50 text-[13px] text-rosys-fg placeholder-rosys-fg-faint/50 focus:outline-none focus:ring-2 focus:ring-rosys-400/20"
 							/>
 							<button
 								type="submit"
 								disabled={!newComment.trim() || commentLoading}
-								class="p-2 rounded-xl bg-rosys-fg text-white disabled:opacity-30 hover:bg-rosys-fg/90 transition-all active:scale-95"
+								class="rosys-btn-primary px-3 py-2"
 							>
 								<Send class="w-4 h-4" strokeWidth={1.5} />
 							</button>
@@ -196,7 +198,6 @@
 			<X class="w-6 h-6" strokeWidth={1.5} />
 		</button>
 
-		<!-- Swipe through pages -->
 		<div class="w-full h-full overflow-auto flex items-start justify-center p-4">
 			<img
 				src={data.pages[fullPageView].src}
@@ -205,7 +206,6 @@
 			/>
 		</div>
 
-		<!-- Prev / Next -->
 		{#if fullPageView > 0}
 			<button
 				type="button"
@@ -225,7 +225,6 @@
 			</button>
 		{/if}
 
-		<!-- Page indicator -->
 		<div class="absolute bottom-6 left-1/2 -translate-x-1/2 glass px-4 py-1.5 rounded-full">
 			<span class="text-white text-[13px] font-medium">{(fullPageView ?? 0) + 1} / {data.pages.length}</span>
 		</div>

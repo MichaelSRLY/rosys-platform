@@ -28,9 +28,9 @@
 {#if isLoginPage}
 	{@render children()}
 {:else}
-	<div class="h-screen bg-rosys-bg md:p-3 md:flex md:gap-0 overflow-hidden">
+	<div class="h-screen bg-warm-50 md:p-3 md:flex md:gap-0 overflow-hidden">
 		<Nav session={data.session} />
-		<main class="flex-1 overflow-auto pb-24 md:pb-0 md:bg-rosys-card/40 md:rounded-2xl md:border md:border-rosys-border/30">
+		<main class="flex-1 overflow-auto pb-24 md:pb-0 md:bg-white/40 md:rounded-2xl md:border md:border-rosys-border/30">
 			{@render children()}
 		</main>
 	</div>

@@ -27,7 +27,6 @@
 		messages = [...messages, { role: 'user', content: question }];
 		loading = true;
 
-		// Scroll to bottom
 		setTimeout(() => chatContainer?.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' }), 50);
 
 		try {
@@ -37,7 +36,7 @@
 				body: JSON.stringify({
 					question,
 					pattern_slug: pattern.pattern_slug,
-					history: messages.slice(-6) // Last 6 messages for context
+					history: messages.slice(-6)
 				})
 			});
 
@@ -61,12 +60,12 @@
 	<!-- Header -->
 	<div class="shrink-0 glass border-b border-rosys-border/30 px-5 py-3">
 		<div class="flex items-center justify-between">
-			<a href="/patterns/{pattern.pattern_slug}" class="flex items-center gap-1.5 text-rosys-fg-faint hover:text-rosys-fg text-[13px] font-medium transition-colors">
+			<a href="/patterns/{pattern.pattern_slug}" class="flex items-center gap-1.5 text-rosys-fg-faint hover:text-rosys-600 text-[13px] font-medium transition-colors">
 				<ArrowLeft class="w-4 h-4" strokeWidth={1.5} />
 				{pattern.pattern_name}
 			</a>
 			<div class="flex items-center gap-1.5 text-rosys-fg-faint">
-				<Sparkles class="w-3.5 h-3.5 text-violet-500" strokeWidth={2} />
+				<Sparkles class="w-3.5 h-3.5 text-rosys-500" strokeWidth={2} />
 				<span class="text-[12px] font-medium">AI Pattern Helper</span>
 			</div>
 		</div>
@@ -75,10 +74,9 @@
 	<!-- Chat messages -->
 	<div bind:this={chatContainer} class="flex-1 overflow-auto px-5 py-6 space-y-4">
 		{#if messages.length === 0}
-			<!-- Empty state with suggestions -->
 			<div class="max-w-lg mx-auto text-center pt-8">
-				<div class="w-14 h-14 rounded-2xl bg-violet-50 flex items-center justify-center mx-auto mb-5">
-					<MessageCircle class="w-7 h-7 text-violet-400" strokeWidth={1.5} />
+				<div class="w-14 h-14 rounded-2xl bg-rosys-50 flex items-center justify-center mx-auto mb-5">
+					<MessageCircle class="w-7 h-7 text-rosys-400" strokeWidth={1.5} />
 				</div>
 				<h2 class="text-[18px] font-semibold text-rosys-fg mb-2">Ask anything about this pattern</h2>
 				<p class="text-[14px] text-rosys-fg-faint mb-8">I have the full instructions, sizing charts, and pattern pieces loaded.</p>
@@ -88,16 +86,16 @@
 						<button
 							type="button"
 							onclick={() => sendMessage(s)}
-							class="px-4 py-2 rounded-xl bg-rosys-card border border-rosys-border/50 text-[13px] text-rosys-fg-muted hover:border-violet-300 hover:text-violet-600 hover:bg-violet-50/50 transition-all"
+							class="px-4 py-2 rounded-xl rosys-card text-[13px] text-rosys-fg-muted hover:border-rosys-300 hover:text-rosys-600 hover:bg-rosys-50/50 transition-all"
 						>{s}</button>
 					{/each}
 				</div>
 
 				{#if tutorials.length > 0}
 					<div class="mt-8 text-left">
-						<h3 class="text-[11px] font-semibold text-rosys-fg-faint uppercase tracking-[0.08em] mb-3">Video Tutorials</h3>
+						<h3 class="text-[11px] font-semibold text-rosys-fg-faint uppercase tracking-[0.1em] mb-3">Video Tutorials</h3>
 						{#each tutorials as tut}
-							<a href={tut.url} target="_blank" rel="noopener" class="flex items-center gap-3 p-3 rounded-xl hover:bg-rosys-card transition-colors">
+							<a href={tut.url} target="_blank" rel="noopener" class="flex items-center gap-3 p-3 rounded-xl hover:bg-warm-50 transition-colors">
 								<Play class="w-4 h-4 text-red-400 shrink-0" strokeWidth={2} />
 								<span class="text-[13px] text-rosys-fg-muted">{tut.title}</span>
 							</a>
@@ -106,18 +104,17 @@
 				{/if}
 			</div>
 		{:else}
-			<!-- Messages -->
 			<div class="max-w-2xl mx-auto space-y-4">
 				{#each messages as msg}
 					{#if msg.role === 'user'}
 						<div class="flex justify-end">
-							<div class="bg-rosys-fg text-white px-4 py-3 rounded-2xl rounded-br-md max-w-[80%] text-[14px] leading-relaxed">
+							<div class="bg-gradient-to-br from-rosys-500 to-rosys-600 text-white px-4 py-3 rounded-2xl rounded-br-md max-w-[80%] text-[14px] leading-relaxed">
 								{msg.content}
 							</div>
 						</div>
 					{:else}
 						<div class="flex justify-start">
-							<div class="bg-rosys-card border border-rosys-border/50 px-4 py-3 rounded-2xl rounded-bl-md max-w-[85%] text-[14px] text-rosys-fg-secondary leading-relaxed shadow-sm whitespace-pre-line">
+							<div class="rosys-card px-4 py-3 rounded-2xl rounded-bl-md max-w-[85%] text-[14px] text-rosys-fg-secondary leading-relaxed whitespace-pre-line">
 								{msg.content}
 							</div>
 						</div>
@@ -126,8 +123,8 @@
 
 				{#if loading}
 					<div class="flex justify-start">
-						<div class="bg-rosys-card border border-rosys-border/50 px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
-							<Loader2 class="w-5 h-5 text-violet-400 animate-spin" strokeWidth={2} />
+						<div class="rosys-card px-4 py-3 rounded-2xl rounded-bl-md">
+							<Loader2 class="w-5 h-5 text-rosys-400 animate-spin" strokeWidth={2} />
 						</div>
 					</div>
 				{/if}
@@ -146,12 +143,12 @@
 				bind:value={input}
 				placeholder="Ask about this pattern..."
 				disabled={loading}
-				class="flex-1 px-4 py-3 rounded-xl bg-rosys-bg border-none text-[14px] text-rosys-fg placeholder-rosys-fg-faint/50 focus:outline-none focus:ring-2 focus:ring-violet-500/20 disabled:opacity-50"
+				class="flex-1 px-4 py-3 rounded-xl bg-warm-50 border border-rosys-border/50 text-[14px] text-rosys-fg placeholder-rosys-fg-faint/50 focus:outline-none focus:ring-2 focus:ring-rosys-400/20 disabled:opacity-50"
 			/>
 			<button
 				type="submit"
 				disabled={!input.trim() || loading}
-				class="px-4 py-3 rounded-xl bg-violet-600 text-white hover:bg-violet-700 active:scale-[0.97] transition-all disabled:opacity-30"
+				class="rosys-btn-primary px-4 py-3"
 			>
 				<Send class="w-4 h-4" strokeWidth={1.5} />
 			</button>

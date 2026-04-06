@@ -13,14 +13,12 @@ interface PatternBasic {
 }
 
 export const load: PageServerLoad = async ({ params }) => {
-	// Verify pattern exists
 	const patterns = await query<PatternBasic>(
 		`SELECT pattern_slug, pattern_name FROM cs_pattern_catalog WHERE pattern_slug = $1`,
 		[params.slug]
 	);
 	if (patterns.length === 0) throw error(404, 'Pattern not found');
 
-	// Fetch all instruction text chunks
 	const instructions = await query<InstructionChunk>(
 		`SELECT chunk_index, description
 		 FROM cs_pattern_embeddings
@@ -31,11 +29,9 @@ export const load: PageServerLoad = async ({ params }) => {
 
 	if (instructions.length === 0) throw error(404, 'No instructions available for this pattern');
 
-	// Parse the main instruction text into sections
 	const mainText = instructions[0]?.description || '';
 	const sizeChart = instructions.find((c) => c.description.includes('SIZE CHART'))?.description || null;
 
-	// Split main instructions into sections by common headers
 	const sections = parseInstructionSections(mainText);
 
 	return {
@@ -52,9 +48,61 @@ interface Section {
 	type: 'intro' | 'materials' | 'step' | 'info';
 }
 
-function parseInstructionSections(text: string): Section[] {
-	const sections: Section[] = [];
+function joinWrappedLines(text: string): string {
 	const lines = text.split('\n');
+	const joined: string[] = [];
+
+	const isHeaderLike = (s: string) => {
+		const t = s.trim();
+		if (!t) return false;
+		if (t === t.toUpperCase() && t.length < 80 && t.length > 2) return true;
+		if (/^\d+\./.test(t)) return true;
+		return false;
+	};
+
+	const looksLikeContinuation = (prev: string, cur: string) => {
+		if (!prev || !cur) return false;
+		if (isHeaderLike(prev)) return false;
+		if (isHeaderLike(cur)) return false;
+		if (/^\d+\./.test(cur)) return false;
+		if (cur.startsWith('- ') || cur.startsWith('• ') || cur.startsWith('* ')) return false;
+		if (/^(Size|Bust|Waist|Hip|Chest|Shoulder)/i.test(cur)) return false;
+		if (cur === cur.toUpperCase() && cur.length > 3) return false;
+		if (/^(NOTE|TIP|IMPORTANT|WARNING)\s*:/i.test(cur)) return false;
+		if (/^(YOU WILL NEED|PRINTING|ASSEMBLING)/i.test(cur)) return false;
+		if (/^\d+\s+\d+/.test(cur.trim())) return false;
+
+		const prevEndsClean = /[.!?:;]$/.test(prev.trim());
+		if (prevEndsClean) return false;
+
+		const startsLower = /^[a-z]/.test(cur.trim());
+		if (startsLower) return true;
+
+		return false;
+	};
+
+	for (const line of lines) {
+		const trimmed = line.trim();
+		if (!trimmed) {
+			joined.push('');
+			continue;
+		}
+
+		const last = joined.length > 0 ? joined[joined.length - 1] : '';
+		if (last && looksLikeContinuation(last, trimmed)) {
+			joined[joined.length - 1] = last + ' ' + trimmed;
+		} else {
+			joined.push(trimmed);
+		}
+	}
+
+	return joined.join('\n');
+}
+
+function parseInstructionSections(text: string): Section[] {
+	const processedText = joinWrappedLines(text);
+	const sections: Section[] = [];
+	const lines = processedText.split('\n');
 	let currentTitle = '';
 	let currentContent: string[] = [];
 	let currentType: Section['type'] = 'intro';
@@ -76,7 +124,6 @@ function parseInstructionSections(text: string): Section[] {
 		const isHeader = sectionHeaders.some((h) => trimmed.toUpperCase().startsWith(h)) && trimmed.length < 80;
 
 		if (isHeader) {
-			// Save previous section
 			if (currentTitle || currentContent.length > 0) {
 				sections.push({
 					title: currentTitle || 'Introduction',
@@ -94,7 +141,6 @@ function parseInstructionSections(text: string): Section[] {
 		}
 	}
 
-	// Save last section
 	if (currentTitle || currentContent.length > 0) {
 		sections.push({
 			title: currentTitle || 'Introduction',

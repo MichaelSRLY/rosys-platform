@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ArrowLeft, Maximize2, ZoomIn, ZoomOut, RotateCcw, Layers } from 'lucide-svelte';
+	import { ArrowLeft, ZoomIn, ZoomOut, RotateCcw } from 'lucide-svelte';
 	import type { PatternPiece } from './+page.server';
 
 	let { data } = $props();
@@ -9,25 +9,22 @@
 	let selectedPiece = $state<PatternPiece | null>(null);
 	let showSeamAllowance = $state(true);
 
-	// Colors for pieces
 	const colors = [
-		{ fill: '#fef3c7', stroke: '#f59e0b' },
+		{ fill: '#fff5f7', stroke: '#e8366d' },
 		{ fill: '#dbeafe', stroke: '#3b82f6' },
-		{ fill: '#fce7f3', stroke: '#ec4899' },
+		{ fill: '#fef3c7', stroke: '#f59e0b' },
 		{ fill: '#d1fae5', stroke: '#10b981' },
 		{ fill: '#ede9fe', stroke: '#8b5cf6' },
 		{ fill: '#fed7aa', stroke: '#f97316' },
 		{ fill: '#cffafe', stroke: '#06b6d4' },
-		{ fill: '#fecaca', stroke: '#ef4444' }
+		{ fill: '#fce7f3', stroke: '#ec4899' }
 	];
 
-	// Calculate SVG dimensions to fit all pieces
 	const SVG_PADDING = 40;
 	const PIECE_GAP = 20;
 
-	// Layout pieces in a grid
 	const svgLayout = $derived.by(() => {
-		const SCALE = 0.15; // mm to SVG units
+		const SCALE = 0.15;
 		const cols = Math.min(pieces.length, Math.ceil(Math.sqrt(pieces.length)));
 
 		let maxRowHeight = 0;
@@ -76,13 +73,13 @@
 	<!-- Header -->
 	<div class="shrink-0 glass border-b border-rosys-border/30 px-5 py-3">
 		<div class="flex items-center justify-between">
-			<a href="/patterns/{pattern.pattern_slug}" class="flex items-center gap-1.5 text-rosys-fg-faint hover:text-rosys-fg text-[13px] font-medium transition-colors">
+			<a href="/patterns/{pattern.pattern_slug}" class="flex items-center gap-1.5 text-rosys-fg-faint hover:text-rosys-600 text-[13px] font-medium transition-colors">
 				<ArrowLeft class="w-4 h-4" strokeWidth={1.5} />
 				{pattern.pattern_name}
 			</a>
 			<div class="flex items-center gap-2">
 				{#if gradeRule}
-					<span class="text-[11px] text-rosys-fg-faint bg-rosys-bg-alt px-2.5 py-1 rounded-md">{sampleSize}</span>
+					<span class="text-[11px] text-rosys-fg-faint bg-rosys-50 px-2.5 py-1 rounded-md">{sampleSize}</span>
 				{/if}
 				<span class="text-[11px] text-rosys-fg-faint">{pieces.length} pieces</span>
 			</div>
@@ -90,21 +87,21 @@
 	</div>
 
 	<!-- Toolbar -->
-	<div class="shrink-0 flex items-center justify-between px-5 py-2 border-b border-rosys-border/20 bg-rosys-card/50">
+	<div class="shrink-0 flex items-center justify-between px-5 py-2 border-b border-rosys-border/20 bg-white/50">
 		<div class="flex items-center gap-1">
-			<button onclick={zoomOut} class="p-2 rounded-lg hover:bg-rosys-bg-alt text-rosys-fg-muted transition-colors">
+			<button onclick={zoomOut} class="p-2 rounded-lg hover:bg-warm-100 text-rosys-fg-muted transition-colors">
 				<ZoomOut class="w-4 h-4" strokeWidth={1.5} />
 			</button>
 			<span class="text-[12px] text-rosys-fg-faint font-medium w-12 text-center">{Math.round(scale * 100)}%</span>
-			<button onclick={zoomIn} class="p-2 rounded-lg hover:bg-rosys-bg-alt text-rosys-fg-muted transition-colors">
+			<button onclick={zoomIn} class="p-2 rounded-lg hover:bg-warm-100 text-rosys-fg-muted transition-colors">
 				<ZoomIn class="w-4 h-4" strokeWidth={1.5} />
 			</button>
-			<button onclick={resetZoom} class="p-2 rounded-lg hover:bg-rosys-bg-alt text-rosys-fg-muted transition-colors">
+			<button onclick={resetZoom} class="p-2 rounded-lg hover:bg-warm-100 text-rosys-fg-muted transition-colors">
 				<RotateCcw class="w-4 h-4" strokeWidth={1.5} />
 			</button>
 		</div>
 		<label class="flex items-center gap-2 cursor-pointer">
-			<input type="checkbox" bind:checked={showSeamAllowance} class="w-3.5 h-3.5 rounded accent-rosys-fg" />
+			<input type="checkbox" bind:checked={showSeamAllowance} class="w-3.5 h-3.5 rounded accent-rosys-500" />
 			<span class="text-[12px] text-rosys-fg-muted">Seam allowance</span>
 		</label>
 	</div>
@@ -118,7 +115,6 @@
 				height={svgLayout.totalH}
 				xmlns="http://www.w3.org/2000/svg"
 			>
-				<!-- Grid dots -->
 				<defs>
 					<pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
 						<circle cx="1" cy="1" r="0.5" fill="#e5e7eb" />
@@ -133,7 +129,6 @@
 						class="cursor-pointer"
 						onclick={() => (selectedPiece = selectedPiece?.id === item.piece.id ? null : item.piece)}
 					>
-						<!-- Cut outline (seam allowance) -->
 						{#if showSeamAllowance}
 							<rect
 								x={item.x}
@@ -149,7 +144,6 @@
 							/>
 						{/if}
 
-						<!-- Finished outline -->
 						<rect
 							x={item.x + item.piece.seamAllowanceW * 0.15}
 							y={item.y + item.piece.seamAllowanceH * 0.15}
@@ -161,7 +155,6 @@
 							rx="1"
 						/>
 
-						<!-- Label -->
 						<text
 							x={item.x + item.w / 2}
 							y={item.y + item.h / 2 - 6}
@@ -172,7 +165,6 @@
 							font-family="Inter, sans-serif"
 						>{item.piece.id}</text>
 
-						<!-- Dimensions -->
 						<text
 							x={item.x + item.w / 2}
 							y={item.y + item.h / 2 + 8}
@@ -183,7 +175,6 @@
 							font-family="Inter, sans-serif"
 						>{(item.piece.cutWidth / 10).toFixed(1)} × {(item.piece.cutHeight / 10).toFixed(1)} cm</text>
 
-						<!-- Fold indicator -->
 						{#if item.piece.fold}
 							<text
 								x={item.x + item.w / 2}
@@ -203,7 +194,7 @@
 
 	<!-- Piece detail panel -->
 	{#if selectedPiece}
-		<div class="shrink-0 bg-rosys-card border-t border-rosys-border/30 px-5 py-4">
+		<div class="shrink-0 bg-white border-t border-rosys-border/30 px-5 py-4">
 			<div class="max-w-3xl mx-auto flex items-start gap-6">
 				<div class="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-4">
 					<div>
@@ -224,8 +215,8 @@
 					</div>
 				</div>
 				<div class="flex gap-3 text-[12px] text-rosys-fg-faint">
-					{#if selectedPiece.fold}<span class="bg-rosys-bg-alt px-2 py-1 rounded-md">Fold</span>{/if}
-					<span class="bg-rosys-bg-alt px-2 py-1 rounded-md">Qty: {selectedPiece.qty}</span>
+					{#if selectedPiece.fold}<span class="bg-rosys-50 px-2 py-1 rounded-md text-rosys-700">Fold</span>{/if}
+					<span class="bg-warm-100 px-2 py-1 rounded-md">Qty: {selectedPiece.qty}</span>
 				</div>
 			</div>
 		</div>

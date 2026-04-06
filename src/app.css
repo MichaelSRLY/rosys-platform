@@ -1,25 +1,45 @@
 @import 'tailwindcss';
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 @theme {
-	/* Rosys brand — refined */
-	--color-rosys-bg: #f6f4f1;
-	--color-rosys-bg-alt: #edeae5;
+	/* Rosys brand palette — pink / rose */
+	--color-rosys-50: #fff5f7;
+	--color-rosys-100: #ffe0e6;
+	--color-rosys-200: #ffc2d1;
+	--color-rosys-300: #ff94ac;
+	--color-rosys-400: #ff5c82;
+	--color-rosys-500: #e8366d;
+	--color-rosys-600: #c4245a;
+	--color-rosys-700: #a01b4a;
+	--color-rosys-800: #841940;
+	--color-rosys-900: #6e1a3a;
+
+	/* Warm neutral scale */
+	--color-warm-50: #fdfcfb;
+	--color-warm-100: #f7f3ef;
+	--color-warm-200: #ede5dd;
+	--color-warm-300: #ddd0c2;
+	--color-warm-400: #c4ad96;
+	--color-warm-500: #a98d73;
+
+	/* Semantic tokens */
+	--color-rosys-bg: var(--color-warm-50);
+	--color-rosys-bg-alt: var(--color-warm-100);
 	--color-rosys-fg: #1a1a1a;
 	--color-rosys-fg-secondary: #3d3d3d;
 	--color-rosys-fg-muted: #666;
 	--color-rosys-fg-faint: #999;
-	--color-rosys-accent: #f9ca4f;
-	--color-rosys-accent-hover: #f0be30;
+	--color-rosys-accent: var(--color-rosys-500);
+	--color-rosys-accent-hover: var(--color-rosys-600);
 	--color-rosys-tan: #c6b8a3;
-	--color-rosys-border: #e5e2dd;
+	--color-rosys-border: var(--color-warm-200);
 	--color-rosys-card: #ffffff;
-	--color-rosys-pink: #d4627a;
+	--color-rosys-pink: var(--color-rosys-500);
 	--color-rosys-success: #34c759;
 
-	--font-logo: 'Playfair Display', 'Times New Roman', Georgia, serif;
-	--font-display: 'Playfair Display', Georgia, serif;
+	--font-heading: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
 	--font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+	--font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
 }
 
 * {
@@ -45,6 +65,11 @@ input, select, textarea {
 	font-family: var(--font-body);
 }
 
+h1, h2, h3, h4, h5, h6 {
+	font-family: var(--font-heading);
+	letter-spacing: -0.025em;
+}
+
 /* Apple-style blur glass */
 .glass {
 	background: rgba(255, 255, 255, 0.72);
@@ -60,4 +85,56 @@ input, select, textarea {
 @keyframes fadeUp {
 	from { opacity: 0; transform: translateY(8px); }
 	to { opacity: 1; transform: translateY(0); }
+}
+
+/* Rosys component classes */
+.rosys-card {
+	background: var(--color-rosys-card);
+	border-radius: 1rem;
+	border: 1px solid color-mix(in srgb, var(--color-rosys-border) 60%, transparent);
+	box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+	transition: box-shadow 0.2s;
+}
+.rosys-card:hover {
+	box-shadow: 0 4px 20px rgba(0,0,0,0.07);
+}
+
+.rosys-btn-primary {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	padding: 0.625rem 1.25rem;
+	border-radius: 0.75rem;
+	font-size: 0.875rem;
+	font-weight: 600;
+	color: white;
+	background: linear-gradient(135deg, var(--color-rosys-500), var(--color-rosys-600));
+	box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+	transition: all 0.15s;
+	cursor: pointer;
+	border: none;
+}
+.rosys-btn-primary:hover {
+	background: linear-gradient(135deg, var(--color-rosys-600), var(--color-rosys-700));
+	box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+.rosys-btn-primary:active {
+	transform: scale(0.98);
+}
+.rosys-btn-primary:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+.rosys-section-icon {
+	width: 2.5rem;
+	height: 2.5rem;
+	border-radius: 0.75rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	background: linear-gradient(135deg, var(--color-rosys-500), var(--color-rosys-600));
+	color: white;
 }
