@@ -21,26 +21,18 @@
 		illustrations: string[]; // storage paths
 	}
 
-	let stepsConfig = $state<StepConfig[]>(
-		adminConfig?.steps_config ||
-		Array.from({ length: stepCount }, (_, i) => ({
-			step: i + 1,
-			layout: 'text-left' as const,
-			illustrations: [] as string[]
-		}))
-	);
-
-	// Ensure all steps have config
-	$effect(() => {
-		if (stepsConfig.length < stepCount) {
-			const existing = new Set(stepsConfig.map((s) => s.step));
-			for (let i = 1; i <= stepCount; i++) {
-				if (!existing.has(i)) {
-					stepsConfig = [...stepsConfig, { step: i, layout: 'text-left', illustrations: [] }];
-				}
-			}
+	// Build initial steps config — merge saved config with detected steps
+	function buildStepsConfig(): StepConfig[] {
+		const saved: StepConfig[] = adminConfig?.steps_config || [];
+		const savedMap = new Map(saved.map((s) => [s.step, s]));
+		const result: StepConfig[] = [];
+		for (let i = 1; i <= stepCount; i++) {
+			result.push(savedMap.get(i) || { step: i, layout: 'text-left', illustrations: [] });
 		}
-	});
+		return result;
+	}
+
+	let stepsConfig = $state<StepConfig[]>(buildStepsConfig());
 
 	let uploading = $state<number | null>(null);
 
@@ -201,7 +193,7 @@
 		<!-- STEPS TAB -->
 		{#if tab === 'steps'}
 			<div class="space-y-4 mb-6">
-				{#each stepsConfig.sort((a, b) => a.step - b.step) as stepCfg}
+				{#each [...stepsConfig].sort((a, b) => a.step - b.step) as stepCfg}
 					{@const hasIllustrations = stepCfg.illustrations.filter(Boolean).length > 0}
 					<div class="bg-rosys-card rounded-2xl border {hasIllustrations ? 'border-emerald-200/50' : 'border-rosys-border/40'} p-5 shadow-sm">
 						<div class="flex items-center justify-between mb-4">
