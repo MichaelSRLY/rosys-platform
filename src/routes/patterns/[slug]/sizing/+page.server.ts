@@ -3,7 +3,7 @@ import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { getPatternSizeChart, type PatternSizeChart } from '$lib/size-matching.server';
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ params, locals }) => {
 	const patterns = await query<{ pattern_slug: string; pattern_name: string }>(
 		`SELECT pattern_slug, pattern_name FROM cs_pattern_catalog WHERE pattern_slug = $1`,
 		[params.slug]
@@ -26,9 +26,25 @@ export const load: PageServerLoad = async ({ params }) => {
 		rawSizeChart = sizeChunks[0]?.description || null;
 	}
 
+	// Load saved measurement profile if user is authenticated
+	let savedProfile: { bust_cm: number; waist_cm: number; hip_cm: number; height_cm: number | null } | null = null;
+	if (locals.session) {
+		const { data: profiles } = await locals.supabase
+			.from('measurement_profiles')
+			.select('bust_cm, waist_cm, hip_cm, height_cm')
+			.eq('user_id', locals.session.user.id)
+			.order('updated_at', { ascending: false })
+			.limit(1);
+
+		if (profiles && profiles.length > 0) {
+			savedProfile = profiles[0];
+		}
+	}
+
 	return {
 		pattern: patterns[0],
 		chart,
-		rawSizeChart
+		rawSizeChart,
+		savedProfile
 	};
 };

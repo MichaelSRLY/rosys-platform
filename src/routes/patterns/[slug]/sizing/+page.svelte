@@ -2,12 +2,12 @@
 	import { ArrowLeft, Ruler, Sparkles, Loader2, Check, AlertTriangle, ChevronDown } from 'lucide-svelte';
 
 	let { data } = $props();
-	const { pattern, chart, rawSizeChart } = data;
+	const { pattern, chart, rawSizeChart, savedProfile } = data;
 
-	let bust = $state('');
-	let waist = $state('');
-	let hip = $state('');
-	let height = $state('');
+	let bust = $state(savedProfile?.bust_cm?.toString() ?? '');
+	let waist = $state(savedProfile?.waist_cm?.toString() ?? '');
+	let hip = $state(savedProfile?.hip_cm?.toString() ?? '');
+	let height = $state(savedProfile?.height_cm?.toString() ?? '');
 	let loading = $state(false);
 	let recommendation = $state('');
 	let structured = $state<any>(null);
@@ -148,7 +148,14 @@
 
 	<!-- Measurement Input -->
 	<div class="rosys-card p-6 mb-6">
-		<h2 class="text-[11px] font-semibold text-rosys-fg-faint uppercase tracking-[0.1em] mb-4">Your Body Measurements (cm)</h2>
+		<div class="flex items-center justify-between mb-4">
+			<h2 class="text-[11px] font-semibold text-rosys-fg-faint uppercase tracking-[0.1em]">Your Body Measurements (cm)</h2>
+			{#if savedProfile}
+				<a href="/profile/measurements" class="text-[11px] font-medium text-rosys-500 hover:text-rosys-600 transition-colors">Saved profile loaded</a>
+			{:else}
+				<a href="/profile/measurements" class="text-[11px] font-medium text-rosys-fg-faint hover:text-rosys-500 transition-colors">Save measurements</a>
+			{/if}
+		</div>
 		<div class="grid grid-cols-2 gap-4">
 			<div>
 				<label for="bust" class="block text-[12px] font-medium text-rosys-fg-muted mb-1.5">Bust</label>
