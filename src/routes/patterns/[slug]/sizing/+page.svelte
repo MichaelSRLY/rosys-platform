@@ -173,9 +173,10 @@
 					class="w-full px-4 py-3 rounded-xl bg-warm-50 border border-rosys-border/50 text-[15px] text-rosys-fg placeholder-rosys-fg-faint/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/20 focus:border-emerald-300 transition-all" />
 			</div>
 			<div>
-				<label for="height" class="block text-[12px] font-medium text-rosys-fg-muted mb-1.5">Height <span class="text-rosys-fg-faint">(optional)</span></label>
+				<label for="height" class="block text-[12px] font-medium text-rosys-fg-muted mb-1.5">Height</label>
 				<input id="height" type="number" bind:value={height} placeholder="e.g. 168"
 					class="w-full px-4 py-3 rounded-xl bg-warm-50 border border-rosys-border/50 text-[15px] text-rosys-fg placeholder-rosys-fg-faint/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/20 focus:border-emerald-300 transition-all" />
+				<p class="text-[10px] text-rosys-fg-faint mt-1">For length adjustment advice</p>
 			</div>
 		</div>
 
@@ -242,6 +243,27 @@
 						— {rec.ease.bust_cm > 10 ? 'relaxed' : rec.ease.bust_cm > 4 ? 'comfortable' : rec.ease.bust_cm > 0 ? 'close' : 'fitted'} silhouette
 					</p>
 				</div>
+			{/if}
+
+			<!-- Height-based length adjustment -->
+			{#if height}
+				{@const h = parseFloat(height)}
+				{@const refHeight = 168}
+				{@const diff = h - refHeight}
+				{#if Math.abs(diff) >= 4}
+					<div class="flex items-start gap-2 px-4 py-2.5 mt-2 rounded-lg bg-blue-50/50 border border-blue-200/30">
+						<Ruler class="w-3.5 h-3.5 text-blue-500 mt-0.5 shrink-0" strokeWidth={1.5} />
+						<div class="text-[13px] text-blue-800">
+							{#if diff > 0}
+								<p>At <strong>{h}cm</strong> you're {diff.toFixed(0)}cm above the reference height (168cm). Consider <strong>adding {Math.round(diff * 0.4)}cm</strong> to the bodice length and <strong>{Math.round(diff * 0.6)}cm</strong> to skirt/pant length for a proportional fit.</p>
+							{:else}
+								<p>At <strong>{h}cm</strong> you're {Math.abs(diff).toFixed(0)}cm below the reference height (168cm). Consider <strong>shortening</strong> the bodice by {Math.round(Math.abs(diff) * 0.4)}cm and the skirt/pant by {Math.round(Math.abs(diff) * 0.6)}cm for a proportional fit.</p>
+							{/if}
+						</div>
+					</div>
+				{/if}
+			{:else}
+				<p class="text-[11px] text-rosys-fg-faint mt-2">Enter your height above for length adjustment advice.</p>
 			{/if}
 
 			<!-- Fit bars: visual position within size range -->
