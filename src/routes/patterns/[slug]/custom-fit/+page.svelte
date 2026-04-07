@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ArrowLeft, Scissors, Loader2, AlertTriangle, Check, Shield, Download, RefreshCw } from 'lucide-svelte';
+	import { ArrowLeft, Scissors, Loader2, AlertTriangle, Check, Download, RefreshCw, FileText, Box } from 'lucide-svelte';
 
 	let { data } = $props();
 	const { pattern, hasDxf, savedProfile } = data;
@@ -11,8 +11,9 @@
 	let loading = $state(false);
 	let generating = $state(false);
 	let grading = $state<any>(null);
-	let dxfResult = $state<any>(null);
+	let files = $state<any[]>([]);
 	let errorMsg = $state('');
+	let downloadingFormat = $state('');
 	let step = $state<'input' | 'preview' | 'ready'>('input');
 
 	async function calculateFit() {
@@ -24,26 +25,20 @@
 			const res = await fetch('/api/patterns/generate-custom', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					pattern_slug: pattern.pattern_slug,
-					bust: parseFloat(bust),
-					waist: parseFloat(waist),
-					hip: parseFloat(hip)
-				})
+				body: JSON.stringify({ pattern_slug: pattern.pattern_slug, bust: parseFloat(bust), waist: parseFloat(waist), hip: parseFloat(hip) })
 			});
-
-			if (!res.ok) throw new Error('Failed to calculate');
+			if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Failed');
 			const json = await res.json();
 			grading = json.grading;
 			step = 'preview';
-		} catch {
-			errorMsg = 'Could not calculate custom fit.';
+		} catch (e: any) {
+			errorMsg = e.message || 'Could not calculate custom fit.';
 		} finally {
 			loading = false;
 		}
 	}
 
-	async function generateAndDownload() {
+	async function generateAll() {
 		generating = true;
 		errorMsg = '';
 
@@ -51,49 +46,47 @@
 			const res = await fetch('/api/patterns/generate-custom', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					pattern_slug: pattern.pattern_slug,
-					bust: parseFloat(bust),
-					waist: parseFloat(waist),
-					hip: parseFloat(hip),
-					generate: true
-				})
+				body: JSON.stringify({ pattern_slug: pattern.pattern_slug, bust: parseFloat(bust), waist: parseFloat(waist), hip: parseFloat(hip), generate: true })
 			});
-
-			if (!res.ok) {
-				const err = await res.json().catch(() => ({}));
-				throw new Error(err.message || 'Generation failed');
-			}
-
+			if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Generation failed');
 			const json = await res.json();
-			dxfResult = json.dxf;
 			grading = json.grading;
+			files = json.files || [];
 			step = 'ready';
-
-			// Auto-download
-			downloadDxf();
 		} catch (e: any) {
-			errorMsg = e.message || 'Could not generate custom pattern.';
+			errorMsg = e.message || 'Could not generate custom patterns.';
 		} finally {
 			generating = false;
 		}
 	}
 
-	function downloadDxf() {
-		if (!dxfResult?.content) return;
-		const blob = new Blob([dxfResult.content], { type: 'application/dxf' });
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = dxfResult.filename;
-		a.click();
-		URL.revokeObjectURL(url);
+	async function downloadFile(format: string, filename: string) {
+		downloadingFormat = format;
+		try {
+			const res = await fetch('/api/patterns/generate-custom', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ pattern_slug: pattern.pattern_slug, bust: parseFloat(bust), waist: parseFloat(waist), hip: parseFloat(hip), generate: true, format })
+			});
+			if (!res.ok) throw new Error('Download failed');
+			const blob = await res.blob();
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = filename;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch {
+			errorMsg = `Failed to download ${format} file.`;
+		} finally {
+			downloadingFormat = '';
+		}
 	}
 
 	function startOver() {
 		step = 'input';
 		grading = null;
-		dxfResult = null;
+		files = [];
 		errorMsg = '';
 	}
 
@@ -106,6 +99,17 @@
 	function fmtDelta(v: number | null) {
 		if (v === null) return '—';
 		return `${v > 0 ? '+' : ''}${v.toFixed(1)}cm`;
+	}
+
+	function formatIcon(format: string) {
+		if (format === 'dxf') return Scissors;
+		if (format === 'a0') return Box;
+		return FileText;
+	}
+
+	function formatSize(bytes: number) {
+		if (bytes > 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+		return `${Math.round(bytes / 1024)} KB`;
 	}
 </script>
 
@@ -125,7 +129,7 @@
 		</div>
 		<div>
 			<h1 class="text-rosys-fg text-[22px] md:text-[26px] font-bold tracking-[-0.03em]">Custom Fit Pattern</h1>
-			<p class="text-rosys-fg-faint text-[13px]">Pattern pieces adjusted to your exact body</p>
+			<p class="text-rosys-fg-faint text-[13px]">Pattern files adjusted to your exact body measurements</p>
 		</div>
 	</div>
 
@@ -136,7 +140,7 @@
 		</div>
 	{:else}
 
-		<!-- Step 1: Measurement Input -->
+		<!-- Step 1: Measurements -->
 		{#if step === 'input'}
 			<div class="rosys-card p-6 mb-6">
 				<div class="flex items-center justify-between mb-4">
@@ -147,61 +151,39 @@
 						<a href="/profile/measurements" class="text-[11px] font-medium text-rosys-fg-faint hover:text-rosys-500 transition-colors">Save measurements</a>
 					{/if}
 				</div>
-
 				<div class="grid grid-cols-3 gap-4">
 					<div>
 						<label for="bust" class="block text-[12px] font-medium text-rosys-fg-muted mb-1.5">Bust</label>
-						<input id="bust" type="number" bind:value={bust} placeholder="88"
-							class="w-full px-4 py-3 rounded-xl bg-warm-50 border border-rosys-border/50 text-[15px] text-rosys-fg placeholder-rosys-fg-faint/40 focus:outline-none focus:ring-2 focus:ring-violet-400/20 focus:border-violet-300 transition-all" />
+						<input id="bust" type="number" bind:value={bust} placeholder="88" class="w-full px-4 py-3 rounded-xl bg-warm-50 border border-rosys-border/50 text-[15px] text-rosys-fg placeholder-rosys-fg-faint/40 focus:outline-none focus:ring-2 focus:ring-violet-400/20 focus:border-violet-300 transition-all" />
 					</div>
 					<div>
 						<label for="waist" class="block text-[12px] font-medium text-rosys-fg-muted mb-1.5">Waist</label>
-						<input id="waist" type="number" bind:value={waist} placeholder="72"
-							class="w-full px-4 py-3 rounded-xl bg-warm-50 border border-rosys-border/50 text-[15px] text-rosys-fg placeholder-rosys-fg-faint/40 focus:outline-none focus:ring-2 focus:ring-violet-400/20 focus:border-violet-300 transition-all" />
+						<input id="waist" type="number" bind:value={waist} placeholder="72" class="w-full px-4 py-3 rounded-xl bg-warm-50 border border-rosys-border/50 text-[15px] text-rosys-fg placeholder-rosys-fg-faint/40 focus:outline-none focus:ring-2 focus:ring-violet-400/20 focus:border-violet-300 transition-all" />
 					</div>
 					<div>
 						<label for="hip" class="block text-[12px] font-medium text-rosys-fg-muted mb-1.5">Hip</label>
-						<input id="hip" type="number" bind:value={hip} placeholder="92"
-							class="w-full px-4 py-3 rounded-xl bg-warm-50 border border-rosys-border/50 text-[15px] text-rosys-fg placeholder-rosys-fg-faint/40 focus:outline-none focus:ring-2 focus:ring-violet-400/20 focus:border-violet-300 transition-all" />
+						<input id="hip" type="number" bind:value={hip} placeholder="92" class="w-full px-4 py-3 rounded-xl bg-warm-50 border border-rosys-border/50 text-[15px] text-rosys-fg placeholder-rosys-fg-faint/40 focus:outline-none focus:ring-2 focus:ring-violet-400/20 focus:border-violet-300 transition-all" />
 					</div>
 				</div>
-
-				<button
-					type="button"
-					disabled={loading || !bust || !waist || !hip}
-					onclick={calculateFit}
-					class="mt-5 w-full py-3.5 inline-flex items-center justify-center gap-2 rounded-xl font-semibold text-[14px] text-white bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-600 hover:to-violet-700 active:scale-[0.98] transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
-				>
-					{#if loading}
-						<Loader2 class="w-4 h-4 animate-spin" strokeWidth={2} />
-						Calculating...
-					{:else}
-						<Scissors class="w-4 h-4" strokeWidth={2} />
-						Calculate Custom Fit
-					{/if}
+				<button type="button" disabled={loading || !bust || !waist || !hip} onclick={calculateFit}
+					class="mt-5 w-full py-3.5 inline-flex items-center justify-center gap-2 rounded-xl font-semibold text-[14px] text-white bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-600 hover:to-violet-700 active:scale-[0.98] transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed">
+					{#if loading}<Loader2 class="w-4 h-4 animate-spin" strokeWidth={2} />Calculating...
+					{:else}<Scissors class="w-4 h-4" strokeWidth={2} />Calculate Custom Fit{/if}
 				</button>
 			</div>
 		{/if}
 
-		<!-- Step 2: Preview grading + Generate -->
+		<!-- Step 2: Preview + Generate -->
 		{#if step === 'preview' && grading}
 			<div class="rosys-card p-6 mb-4 page-enter">
 				<div class="flex items-center justify-between mb-5">
 					<div>
 						<p class="text-[11px] font-semibold text-violet-600 uppercase tracking-[0.1em]">Custom Fit Preview</p>
-						<p class="text-[13px] text-rosys-fg-muted">
-							Grading from {grading.sample_size} base
-							{#if grading.target_size !== grading.sample_size}
-								toward {grading.target_size}
-							{/if}
-						</p>
+						<p class="text-[13px] text-rosys-fg-muted">Based on {grading.sample_size} pattern, adjusted for your body</p>
 					</div>
-					<span class="text-[11px] font-semibold px-2.5 py-1 rounded-lg border capitalize {confidenceColor(grading.confidence)}">
-						{grading.confidence}
-					</span>
+					<span class="text-[11px] font-semibold px-2.5 py-1 rounded-lg border capitalize {confidenceColor(grading.confidence)}">{grading.confidence}</span>
 				</div>
 
-				<!-- Comparison table -->
 				<div class="overflow-x-auto -mx-1 mb-5">
 					<table class="w-full text-[13px]">
 						<thead>
@@ -214,10 +196,10 @@
 						</thead>
 						<tbody>
 							{#each [
-								{ label: 'Bust (finished)', sample: grading.sample_finished.bust_cm, custom: grading.custom_finished.bust_cm, delta: grading.adjustments.bust_delta_cm },
-								{ label: 'Waist (finished)', sample: grading.sample_finished.waist_cm, custom: grading.custom_finished.waist_cm, delta: grading.adjustments.waist_delta_cm },
-								{ label: 'Hip (finished)', sample: grading.sample_finished.hip_cm, custom: grading.custom_finished.hip_cm, delta: grading.adjustments.hip_delta_cm },
-								{ label: 'Full Length', sample: grading.sample_finished.full_length_cm, custom: grading.custom_finished.full_length_cm, delta: grading.adjustments.length_delta_cm }
+								{ label: 'Bust', sample: grading.sample_finished.bust_cm, custom: grading.custom_finished.bust_cm, delta: grading.adjustments.bust_delta_cm },
+								{ label: 'Waist', sample: grading.sample_finished.waist_cm, custom: grading.custom_finished.waist_cm, delta: grading.adjustments.waist_delta_cm },
+								{ label: 'Hip', sample: grading.sample_finished.hip_cm, custom: grading.custom_finished.hip_cm, delta: grading.adjustments.hip_delta_cm },
+								{ label: 'Length', sample: grading.sample_finished.full_length_cm, custom: grading.custom_finished.full_length_cm, delta: grading.adjustments.length_delta_cm }
 							] as row}
 								<tr class="border-b border-rosys-border/20">
 									<td class="py-2.5 pr-3 text-rosys-fg-muted font-medium">{row.label}</td>
@@ -242,116 +224,77 @@
 				{/if}
 
 				<div class="flex gap-3">
-					<button
-						type="button"
-						disabled={generating}
-						onclick={generateAndDownload}
-						class="flex-1 py-3.5 inline-flex items-center justify-center gap-2 rounded-xl font-semibold text-[14px] text-white bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-600 hover:to-violet-700 active:scale-[0.98] transition-all shadow-sm disabled:opacity-40"
-					>
-						{#if generating}
-							<Loader2 class="w-4 h-4 animate-spin" strokeWidth={2} />
-							Generating your pattern...
-						{:else}
-							<Download class="w-4 h-4" strokeWidth={2} />
-							Generate & Download DXF
-						{/if}
+					<button type="button" disabled={generating} onclick={generateAll}
+						class="flex-1 py-3.5 inline-flex items-center justify-center gap-2 rounded-xl font-semibold text-[14px] text-white bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-600 hover:to-violet-700 active:scale-[0.98] transition-all shadow-sm disabled:opacity-40">
+						{#if generating}<Loader2 class="w-4 h-4 animate-spin" strokeWidth={2} />Generating your patterns...
+						{:else}<Scissors class="w-4 h-4" strokeWidth={2} />Generate My Custom Patterns{/if}
 					</button>
-					<button
-						type="button"
-						onclick={startOver}
-						class="px-4 py-3 rounded-xl text-[14px] font-medium text-rosys-fg-muted hover:bg-warm-100 transition-colors"
-					>
+					<button type="button" onclick={startOver} class="px-4 py-3 rounded-xl text-rosys-fg-muted hover:bg-warm-100 transition-colors">
 						<RefreshCw class="w-4 h-4" strokeWidth={1.5} />
 					</button>
 				</div>
 			</div>
 		{/if}
 
-		<!-- Step 3: Generated + Validation -->
-		{#if step === 'ready' && dxfResult}
-			<!-- Success banner -->
+		<!-- Step 3: Download files -->
+		{#if step === 'ready' && files.length > 0}
 			<div class="rosys-card border-emerald-200/60 p-6 mb-4 page-enter">
-				<div class="flex items-center gap-3 mb-4">
+				<div class="flex items-center gap-3 mb-5">
 					<div class="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center">
 						<Check class="w-5 h-5 text-white" strokeWidth={2.5} />
 					</div>
 					<div>
-						<p class="text-[16px] font-bold text-rosys-fg">Your custom pattern is ready</p>
-						<p class="text-[13px] text-rosys-fg-muted">{dxfResult.filename}</p>
+						<p class="text-[16px] font-bold text-rosys-fg">Your custom patterns are ready</p>
+						<p class="text-[13px] text-rosys-fg-muted">Adjusted for bust {bust}cm, waist {waist}cm, hip {hip}cm</p>
 					</div>
 				</div>
 
-				<button
-					type="button"
-					onclick={downloadDxf}
-					class="w-full py-3.5 inline-flex items-center justify-center gap-2 rounded-xl font-semibold text-[14px] text-white bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 active:scale-[0.98] transition-all shadow-sm"
-				>
-					<Download class="w-4 h-4" strokeWidth={2} />
-					Download Again
-				</button>
-			</div>
-
-			<!-- Piece-by-piece breakdown -->
-			<div class="rosys-card p-5 mb-4 page-enter">
-				<h2 class="text-[11px] font-semibold text-rosys-fg-faint uppercase tracking-[0.1em] mb-3">Pattern Pieces</h2>
 				<div class="space-y-2">
-					{#each dxfResult.pieces as piece}
-						<div class="flex items-center justify-between py-2 px-3 rounded-lg bg-warm-50/50">
-							<span class="text-[13px] font-medium text-rosys-fg">{piece.name}</span>
-							<div class="flex items-center gap-4 text-[12px]">
-								<span class="text-rosys-fg-faint">{piece.originalCutMm.w}x{piece.originalCutMm.h}mm</span>
-								<span class="text-rosys-fg-faint">→</span>
-								<span class="font-medium text-violet-600">{piece.gradedCutMm.w}x{piece.gradedCutMm.h}mm</span>
-								<span class="text-rosys-fg-faint">
-									({piece.deltaW > 0 ? '+' : ''}{piece.deltaW}, {piece.deltaH > 0 ? '+' : ''}{piece.deltaH})
-								</span>
+					{#each files as file}
+						{@const Icon = formatIcon(file.format)}
+						<button
+							type="button"
+							onclick={() => downloadFile(file.format, file.filename)}
+							disabled={!!downloadingFormat}
+							class="w-full flex items-center gap-4 p-4 bg-white border border-rosys-border/40 rounded-xl hover:border-emerald-300 hover:shadow-sm active:scale-[0.98] transition-all text-left group"
+						>
+							<div class="w-10 h-10 rounded-xl {file.format === 'a0' ? 'bg-blue-50' : file.format === 'dxf' ? 'bg-violet-50' : 'bg-warm-100'} flex items-center justify-center shrink-0">
+								<Icon class="w-5 h-5 {file.format === 'a0' ? 'text-blue-500' : file.format === 'dxf' ? 'text-violet-500' : 'text-rosys-fg-muted'}" strokeWidth={1.5} />
 							</div>
-						</div>
+							<div class="flex-1 min-w-0">
+								<p class="text-[14px] font-medium text-rosys-fg">{file.label}</p>
+								<p class="text-[12px] text-rosys-fg-faint">{file.filename} — {formatSize(file.size)}</p>
+							</div>
+							{#if downloadingFormat === file.format}
+								<Loader2 class="w-4 h-4 text-rosys-fg-faint animate-spin shrink-0" strokeWidth={2} />
+							{:else}
+								<Download class="w-4 h-4 text-rosys-fg/20 group-hover:text-emerald-500 shrink-0 transition-colors" strokeWidth={1.5} />
+							{/if}
+						</button>
 					{/each}
 				</div>
 			</div>
 
-			<!-- Validation results -->
-			<div class="rosys-card p-5 mb-6 page-enter">
-				<div class="flex items-center gap-2 mb-3">
-					<Shield class="w-4 h-4 {dxfResult.validation.passed ? 'text-emerald-500' : 'text-amber-500'}" strokeWidth={1.5} />
-					<h2 class="text-[11px] font-semibold text-rosys-fg-faint uppercase tracking-[0.1em]">
-						Validation {dxfResult.validation.passed ? 'Passed' : 'Warnings'}
-					</h2>
+			<!-- What's included -->
+			{#if grading}
+				<div class="rosys-card p-5 mb-6 page-enter">
+					<h2 class="text-[11px] font-semibold text-rosys-fg-faint uppercase tracking-[0.1em] mb-3">What's adjusted</h2>
+					<div class="grid grid-cols-2 gap-3 text-[13px]">
+						<div class="p-3 rounded-lg bg-violet-50/50">
+							<p class="text-[11px] text-violet-500 font-semibold mb-0.5">Width</p>
+							<p class="text-rosys-fg font-medium">{((grading.scale_width - 1) * 100).toFixed(1)}% {grading.scale_width > 1 ? 'larger' : 'smaller'}</p>
+						</div>
+						<div class="p-3 rounded-lg bg-violet-50/50">
+							<p class="text-[11px] text-violet-500 font-semibold mb-0.5">Height</p>
+							<p class="text-rosys-fg font-medium">{((grading.scale_height - 1) * 100).toFixed(1)}% {grading.scale_height > 1 ? 'longer' : 'shorter'}</p>
+						</div>
+					</div>
+					<p class="text-[12px] text-rosys-fg-faint mt-3">All pattern pieces have been proportionally scaled from the {grading.sample_size} base pattern, preserving the design's intended ease and fit characteristics.</p>
 				</div>
+			{/if}
 
-				{#if dxfResult.validation.passed}
-					<div class="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200/40">
-						<Check class="w-4 h-4 text-emerald-500" strokeWidth={2} />
-						<span class="text-[13px] text-emerald-700">All {dxfResult.validation.checks.length} dimension checks passed — piece dimensions match expected measurements within 1mm tolerance.</span>
-					</div>
-				{:else}
-					<div class="space-y-1">
-						{#each dxfResult.validation.checks as check}
-							<div class="flex items-center justify-between py-1.5 px-3 rounded-lg {check.passed ? 'bg-emerald-50/50' : 'bg-amber-50'}">
-								<span class="text-[12px] text-rosys-fg-muted">{check.name}</span>
-								<div class="flex items-center gap-2">
-									<span class="text-[12px] text-rosys-fg-faint">expected {check.expected}mm</span>
-									<span class="text-[12px] font-medium {check.passed ? 'text-emerald-600' : 'text-amber-600'}">
-										actual {check.actual}mm
-									</span>
-									{#if check.passed}
-										<Check class="w-3 h-3 text-emerald-500" strokeWidth={2.5} />
-									{:else}
-										<AlertTriangle class="w-3 h-3 text-amber-500" strokeWidth={2} />
-									{/if}
-								</div>
-							</div>
-						{/each}
-					</div>
-				{/if}
-			</div>
-
-			<button
-				type="button"
-				onclick={startOver}
-				class="w-full py-3 inline-flex items-center justify-center gap-2 rounded-xl text-[14px] font-medium text-rosys-fg-muted bg-rosys-card border border-rosys-border/60 hover:border-rosys-fg/20 hover:shadow-sm transition-all"
-			>
+			<button type="button" onclick={startOver}
+				class="w-full py-3 inline-flex items-center justify-center gap-2 rounded-xl text-[14px] font-medium text-rosys-fg-muted bg-rosys-card border border-rosys-border/60 hover:border-rosys-fg/20 hover:shadow-sm transition-all">
 				<RefreshCw class="w-4 h-4" strokeWidth={1.5} />
 				Generate for different measurements
 			</button>

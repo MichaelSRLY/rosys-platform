@@ -6,11 +6,13 @@
  * Runs server-side on Vercel (pure TypeScript, no Python dependency).
  */
 
+import { createClient } from '@supabase/supabase-js';
 import { env } from '$env/dynamic/private';
-import { env as pubEnv } from '$env/dynamic/public';
+import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 
-const SUPABASE_URL = pubEnv.PUBLIC_SUPABASE_URL || 'https://lahzrlyhojyfadjasdrc.supabase.co';
-const SERVICE_KEY = env.SUPABASE_SERVICE_KEY || '';
+function getAdmin() {
+	return createClient(PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_KEY || '');
+}
 
 // ─── DXF Data Structures ───
 
@@ -59,37 +61,32 @@ export interface GradedDxf {
 // ─── Supabase Storage ───
 
 async function findDxfPath(slug: string): Promise<string | null> {
-	for (const prefix of [`${slug}/dxf/`, `${slug}/dxf /`]) {
-		try {
-			const res = await fetch(`${SUPABASE_URL}/storage/v1/object/list/pattern-files`, {
-				method: 'POST',
-				headers: {
-					apikey: SERVICE_KEY,
-					Authorization: `Bearer ${SERVICE_KEY}`,
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({ prefix, limit: 10 })
-			});
-			const files = await res.json();
-			const dxf = files?.find?.((f: any) => f.name?.endsWith('.dxf'));
-			if (dxf) return `${prefix}${dxf.name}`;
-		} catch {
-			continue;
-		}
+	const admin = getAdmin();
+
+	for (const prefix of [`${slug}/dxf`, `${slug}/dxf `]) {
+		const { data: files, error } = await admin.storage
+			.from('pattern-files')
+			.list(prefix, { limit: 10 });
+
+		if (error || !files) continue;
+
+		const dxf = files.find((f) => f.name.endsWith('.dxf'));
+		if (dxf) return `${prefix}/${dxf.name}`;
 	}
 	return null;
 }
 
 async function downloadDxf(path: string): Promise<string> {
-	const encodedPath = encodeURIComponent(path).replace(/%2F/g, '/');
-	const res = await fetch(`${SUPABASE_URL}/storage/v1/object/pattern-files/${encodedPath}`, {
-		headers: {
-			apikey: SERVICE_KEY,
-			Authorization: `Bearer ${SERVICE_KEY}`
-		}
-	});
-	if (!res.ok) throw new Error(`Failed to download DXF: ${res.status}`);
-	return await res.text();
+	const admin = getAdmin();
+	const { data, error } = await admin.storage
+		.from('pattern-files')
+		.download(path);
+
+	if (error || !data) {
+		throw new Error(`Failed to download DXF at ${path}: ${error?.message || 'no data'}`);
+	}
+
+	return await data.text();
 }
 
 // ─── DXF Parsing ───
@@ -339,7 +336,7 @@ function validateGradedDxf(
 	const checks: ValidationCheck[] = [];
 
 	// Re-parse the graded DXF to get actual dimensions
-	const gradedPieces = parsePieces(gradedContent);
+	const gradedPieces = parsePieces(gradedContent.replace(/\r\n/g, '\n'));
 
 	for (const orig of originalPieces) {
 		if (!orig.cutBbox) continue;
@@ -390,9 +387,14 @@ export async function generateCustomDxf(
 ): Promise<GradedDxf | null> {
 	// 1. Find and download the DXF
 	const dxfPath = await findDxfPath(patternSlug);
-	if (!dxfPath) return null;
+	if (!dxfPath) {
+		throw new Error(`No DXF path found for ${patternSlug}`);
+	}
 
-	const originalContent = await downloadDxf(dxfPath);
+	let originalContent = await downloadDxf(dxfPath);
+
+	// Normalize line endings — DXF files from Windows use \r\n
+	originalContent = originalContent.replace(/\r\n/g, '\n');
 
 	// 2. Parse pieces
 	const pieces = parsePieces(originalContent);
