@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ArrowLeft, Ruler, Sparkles, Loader2, Check, AlertTriangle, ChevronDown } from 'lucide-svelte';
+	import { ArrowLeft, Ruler, Sparkles, Loader2, Check, AlertTriangle, ChevronDown, Download, FileText, Box } from 'lucide-svelte';
 
 	let { data } = $props();
 	const { pattern, chart, rawSizeChart, savedProfile } = data;
@@ -305,6 +305,33 @@
 			</div>
 			<div class="text-[13px] text-rosys-fg-muted leading-[1.75] whitespace-pre-line">
 				{recommendation}
+			</div>
+		</div>
+	{/if}
+
+	<!-- Download Your Size -->
+	{#if highlightedSize}
+		<div class="rosys-card border-violet-200/60 p-5 mb-6 page-enter">
+			<div class="flex items-center gap-2 mb-3">
+				<Download class="w-4 h-4 text-violet-500" strokeWidth={1.5} />
+				<h2 class="text-[11px] font-semibold text-violet-600 uppercase tracking-[0.1em]">Download Size {highlightedSize} Only</h2>
+			</div>
+			<p class="text-[12px] text-rosys-fg-faint mb-4">Clean single-size pattern — no other size lines, just yours.</p>
+			<div class="grid grid-cols-3 gap-2">
+				{#each [
+					{ format: 'a0', label: 'A0', desc: 'Print shop', icon: Box },
+					{ format: 'a4', label: 'A4', desc: 'Home printer', icon: FileText },
+					{ format: 'us_letter', label: 'US Letter', desc: 'US printer', icon: FileText }
+				] as dl}
+					<a
+						href="/api/patterns/single-size?slug={pattern.pattern_slug}&size={highlightedSize}&format={dl.format}"
+						class="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-violet-50/50 border border-violet-100/60 hover:border-violet-300 hover:shadow-sm active:scale-[0.98] transition-all text-center group"
+					>
+						<dl.icon class="w-5 h-5 text-violet-400 group-hover:text-violet-500" strokeWidth={1.5} />
+						<span class="text-[13px] font-semibold text-rosys-fg">{dl.label}</span>
+						<span class="text-[10px] text-rosys-fg-faint">{dl.desc}</span>
+					</a>
+				{/each}
 			</div>
 		</div>
 	{/if}
