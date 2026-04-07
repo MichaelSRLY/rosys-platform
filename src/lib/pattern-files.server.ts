@@ -6,14 +6,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { env } from '$env/dynamic/private';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
-import { PDFDocument } from 'pdf-lib';
 
 function getAdmin() {
 	return createClient(PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_KEY || '');
 }
 
 export interface PatternFile {
-	format: 'a0' | 'a4' | 'us_letter' | 'dxf';
+	format: 'dxf';
 	label: string;
 	filename: string;
 	data: Uint8Array;
@@ -26,49 +25,28 @@ interface ScaleFactors {
 }
 
 /**
- * Find all available pattern files for a slug.
+ * Find the DXF file for a pattern.
  */
-async function listPatternFiles(slug: string): Promise<{ format: string; path: string; name: string }[]> {
+async function findDxfFile(slug: string): Promise<{ path: string; name: string } | null> {
 	const admin = getAdmin();
-	const formats = [
-		{ format: 'a0', folder: 'a0', label: 'A0 Pattern Sheet' },
-		{ format: 'a4', folder: 'a4', label: 'A4 Tiled Pattern' },
-		{ format: 'us_letter', folder: 'us_letter', label: 'US Letter Tiled Pattern' },
-		{ format: 'dxf', folder: 'dxf', label: 'DXF Cutting File' }
-	];
 
-	const found: { format: string; path: string; name: string }[] = [];
+	for (const folder of ['dxf', 'dxf ']) {
+		const { data: files } = await admin.storage
+			.from('pattern-files')
+			.list(`${slug}/${folder}`, { limit: 5 });
 
-	for (const fmt of formats) {
-		for (const folder of [fmt.folder, `${fmt.folder} `]) {
-			const { data: files } = await admin.storage
-				.from('pattern-files')
-				.list(`${slug}/${folder}`, { limit: 5 });
-
-			if (!files) continue;
-
-			const target = files.find(f =>
-				f.name.endsWith('.pdf') || f.name.endsWith('.dxf')
-			);
-
-			if (target) {
-				found.push({
-					format: fmt.format,
-					path: `${slug}/${folder}/${target.name}`,
-					name: target.name
-				});
-				break;
-			}
-		}
+		if (!files) continue;
+		const dxf = files.find(f => f.name.endsWith('.dxf'));
+		if (dxf) return { path: `${slug}/${folder}/${dxf.name}`, name: dxf.name };
 	}
 
-	return found;
+	return null;
 }
 
 /**
- * Download a file from Supabase storage.
+ * Download a file from Supabase storage as text.
  */
-async function downloadFile(path: string): Promise<Uint8Array> {
+async function downloadFileText(path: string): Promise<string> {
 	const admin = getAdmin();
 	const { data, error } = await admin.storage
 		.from('pattern-files')
@@ -78,39 +56,7 @@ async function downloadFile(path: string): Promise<Uint8Array> {
 		throw new Error(`Download failed for ${path}: ${error?.message}`);
 	}
 
-	const buffer = await data.arrayBuffer();
-	return new Uint8Array(buffer);
-}
-
-/**
- * Scale a PDF by applying a transformation to all pages.
- * Uses pdf-lib to modify the page content stream scaling.
- */
-async function scalePdf(
-	pdfBytes: Uint8Array,
-	scale: ScaleFactors,
-	customLabel: string
-): Promise<Uint8Array> {
-	const doc = await PDFDocument.load(pdfBytes);
-	const pages = doc.getPages();
-
-	for (const page of pages) {
-		const { width, height } = page.getSize();
-
-		// Scale the page content by adjusting the media box and applying a transform
-		// New dimensions
-		const newWidth = width * scale.width;
-		const newHeight = height * scale.height;
-
-		// Set new page size
-		page.setSize(newWidth, newHeight);
-
-		// Scale existing content: push current graphics state, apply scale transform
-		// This scales all vector content (lines, curves, text) proportionally
-		page.scaleContent(scale.width, scale.height);
-	}
-
-	return await doc.save();
+	return await data.text();
 }
 
 /**
@@ -188,59 +134,31 @@ function scaleDxf(
 }
 
 /**
- * Generate custom-fit pattern files in all available formats.
+ * Generate a custom-fit DXF pattern file.
+ * Only DXF is supported for custom scaling — DXF files contain a single size,
+ * so proportional scaling produces an accurate custom-fit pattern.
+ * Multi-size PDFs should NOT be scaled (it would make 6 of 7 size lines wrong).
  */
-export async function generateCustomPatternFiles(
+export async function generateCustomDxfFile(
 	patternSlug: string,
 	patternName: string,
 	scale: ScaleFactors,
 	customLabel: string
-): Promise<PatternFile[]> {
-	// 1. Find all available files
-	const available = await listPatternFiles(patternSlug);
-	if (available.length === 0) {
-		throw new Error(`No pattern files found for ${patternSlug}`);
+): Promise<PatternFile> {
+	const dxfFile = await findDxfFile(patternSlug);
+	if (!dxfFile) {
+		throw new Error(`No DXF file found for ${patternSlug}`);
 	}
 
-	const results: PatternFile[] = [];
+	const raw = await downloadFileText(dxfFile.path);
+	const scaled = scaleDxf(raw, scale, customLabel);
 	const cleanName = patternName.toLowerCase().replace(/\s+/g, '-');
 
-	// 2. Process each format
-	for (const file of available) {
-		try {
-			const raw = await downloadFile(file.path);
-
-			if (file.format === 'dxf') {
-				const text = new TextDecoder().decode(raw);
-				const scaled = scaleDxf(text, scale, customLabel);
-				results.push({
-					format: 'dxf',
-					label: 'DXF Cutting File',
-					filename: `${cleanName}-custom-fit.dxf`,
-					data: new TextEncoder().encode(scaled),
-					mimeType: 'application/dxf'
-				});
-			} else {
-				// PDF formats
-				const scaled = await scalePdf(raw, scale, customLabel);
-				const formatLabels: Record<string, string> = {
-					a0: 'A0 Pattern Sheet',
-					a4: 'A4 Tiled Pattern',
-					us_letter: 'US Letter Tiled Pattern'
-				};
-				results.push({
-					format: file.format as PatternFile['format'],
-					label: formatLabels[file.format] || file.format,
-					filename: `${cleanName}-custom-fit-${file.format}.pdf`,
-					data: new Uint8Array(scaled),
-					mimeType: 'application/pdf'
-				});
-			}
-		} catch (e: any) {
-			console.error(`Failed to process ${file.format} for ${patternSlug}:`, e.message);
-			// Continue with other formats — don't fail the whole request
-		}
-	}
-
-	return results;
+	return {
+		format: 'dxf',
+		label: 'Custom-Fit DXF Pattern',
+		filename: `${cleanName}-custom-fit.dxf`,
+		data: new TextEncoder().encode(scaled),
+		mimeType: 'application/dxf'
+	};
 }
