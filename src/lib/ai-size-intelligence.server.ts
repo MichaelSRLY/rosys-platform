@@ -172,9 +172,9 @@ export async function getAISizeRecommendation(
 		[patternSlug]
 	);
 
-	// 4. Get pattern name and info
-	const patternInfo = await query<{ pattern_name: string; category: string }>(
-		`SELECT pattern_name, category FROM cs_pattern_catalog WHERE pattern_slug = $1`,
+	// 4. Get pattern name
+	const patternInfo = await query<{ pattern_name: string }>(
+		`SELECT pattern_name FROM cs_pattern_catalog WHERE pattern_slug = $1`,
 		[patternSlug]
 	);
 
@@ -191,7 +191,7 @@ export async function getAISizeRecommendation(
 		pattern: {
 			name: patternInfo[0]?.pattern_name || patternSlug,
 			slug: patternSlug,
-			category: patternInfo[0]?.category,
+			category: undefined,
 			sizes: chart.sizes,
 			body_chart: chart.body.map(r => ({
 				size: r.size,
