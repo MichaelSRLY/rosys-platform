@@ -91,16 +91,6 @@
 							<p class="text-[11px] text-rosys-fg-faint">Interactive</p>
 						</div>
 					</a>
-					{#if hasDxf}
-					<a href="/patterns/{pattern.pattern_slug}/custom-fit"
-						class="flex items-center gap-3 p-3.5 bg-rosys-card border border-violet-200/60 rounded-xl hover:border-violet-300 hover:shadow-sm transition-all">
-						<Scissors class="w-5 h-5 text-violet-500" strokeWidth={1.5} />
-						<div>
-							<p class="text-[13px] font-medium text-rosys-fg">Custom Fit</p>
-							<p class="text-[11px] text-rosys-fg-faint">Your size</p>
-						</div>
-					</a>
-					{/if}
 					<a href="/patterns/{pattern.pattern_slug}/help"
 						class="flex items-center gap-3 p-3.5 bg-rosys-card border border-rosys-border/60 rounded-xl hover:border-violet-300 hover:shadow-sm transition-all">
 						<MessageCircle class="w-5 h-5 text-violet-500" strokeWidth={1.5} />
