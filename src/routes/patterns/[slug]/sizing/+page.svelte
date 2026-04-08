@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ArrowLeft, Ruler, Sparkles, Loader2, Check, Download, FileText, Box, ChevronDown } from 'lucide-svelte';
+	import { ArrowLeft, Ruler, Sparkles, Loader2, Check, Download, FileText, Box, ChevronDown, Zap } from 'lucide-svelte';
 
 	let { data } = $props();
 	const { pattern, chart, rawSizeChart, savedProfile } = data;
@@ -14,9 +14,11 @@
 	let height = $state(savedProfile?.height_cm?.toString() ?? '');
 	let loading = $state(false);
 	let result = $state<any>(null);
+	let profile = $state<any>(null);
 	let errorMsg = $state('');
 	let showDetails = $state(false);
 	let showChart = $state(false);
+	let showProfile = $state(false);
 
 	const highlightedSize = $derived(result?.recommended_size ?? null);
 	const highlightedIndex = $derived(highlightedSize ? sizes.indexOf(highlightedSize) : -1);
@@ -41,6 +43,21 @@
 			if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Something went wrong');
 			const json = await res.json();
 			result = json.recommendation;
+
+			// Also predict full body profile if height is provided
+			if (height) {
+				try {
+					const profileRes = await fetch('/api/ai/body-profile', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ bust: parseFloat(bust), waist: parseFloat(waist), hip: parseFloat(hip), height: parseFloat(height) })
+					});
+					if (profileRes.ok) {
+						const pj = await profileRes.json();
+						profile = pj.profile;
+					}
+				} catch {} // Non-critical — don't block the main result
+			}
 		} catch (e: any) {
 			errorMsg = e.message || 'Something went wrong. Please try again.';
 		} finally {
@@ -185,6 +202,47 @@
 				</div>
 			</div>
 		</div>
+
+		<!-- Body profile (the wow effect) -->
+		{#if profile}
+			<button type="button" onclick={() => showProfile = !showProfile}
+				class="w-full flex items-center justify-between p-4 rounded-2xl bg-white border border-rosys-border/30 shadow-sm hover:shadow-md transition-all mb-4 page-enter">
+				<div class="flex items-center gap-3">
+					<div class="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center">
+						<Zap class="w-4 h-4 text-white" strokeWidth={2} />
+					</div>
+					<div class="text-left">
+						<p class="text-[13px] font-semibold text-rosys-fg">Your Estimated Body Profile</p>
+						<p class="text-[11px] text-rosys-fg-faint">Predicted from your measurements — shoulder, arms, legs & more</p>
+					</div>
+				</div>
+				<ChevronDown class="w-4 h-4 text-rosys-fg-faint transition-transform {showProfile ? 'rotate-180' : ''}" strokeWidth={1.5} />
+			</button>
+
+			{#if showProfile}
+				<div class="bg-white rounded-2xl border border-rosys-border/20 shadow-sm p-5 mb-6 page-enter">
+					<div class="grid grid-cols-3 gap-3">
+						{#each [
+							{ label: 'Shoulder', value: profile.shoulder_cm, icon: '↔' },
+							{ label: 'Arm Length', value: profile.arm_length_cm, icon: '📏' },
+							{ label: 'Arm Circ.', value: profile.arm_circ_cm, icon: '💪' },
+							{ label: 'Leg Length', value: profile.leg_length_cm, icon: '🦵' },
+							{ label: 'Est. Weight', value: profile.weight_kg, icon: '⚖️', unit: 'kg' },
+							{ label: 'Neck', value: profile.neck_cm, icon: '👔' },
+						] as m}
+							{#if m.value}
+								<div class="text-center p-3 rounded-xl bg-gradient-to-b from-warm-50 to-white border border-rosys-border/20">
+									<span class="text-[16px]">{m.icon}</span>
+									<p class="text-[18px] font-bold text-rosys-fg mt-1">{m.value}</p>
+									<p class="text-[10px] text-rosys-fg-faint">{m.unit || 'cm'} · {m.label}</p>
+								</div>
+							{/if}
+						{/each}
+					</div>
+					<p class="text-[11px] text-rosys-fg-faint text-center mt-3">Estimated from 59,000 body measurement records</p>
+				</div>
+			{/if}
+		{/if}
 
 		<!-- AI details (expandable — for those who want more) -->
 		{#if result.garment_notes || result.fit_analysis?.length > 0}
