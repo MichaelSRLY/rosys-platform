@@ -18,7 +18,7 @@
 		{ href: '/magazine', label: 'Magazine', icon: BookOpen },
 		{ href: '/patterns', label: 'Patterns', icon: Scissors },
 		{ href: '/voting', label: 'Voting', icon: Vote },
-		{ href: '/size-assistant', label: 'Sizing', icon: Ruler }
+		{ href: '/sizing', label: 'Sizing', icon: Ruler }
 	];
 
 	function isActive(href: string, exact?: boolean) {
