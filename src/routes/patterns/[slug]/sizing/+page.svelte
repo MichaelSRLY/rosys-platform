@@ -469,7 +469,10 @@
 							<div class="pref-group">
 								<span class="pref-title">By area</span>
 								{#each [{l:'Bust',g:()=>bustPref,s:(v:string)=>bustPref=v,o:['More room','As fitted as possible']},{l:'Waist',g:()=>waistPref,s:(v:string)=>waistPref=v,o:['More room','Defined waist']},{l:'Hip',g:()=>hipPref,s:(v:string)=>hipPref=v,o:['More room','Slim through hip']}] as a}
-									<div class="pref-area"><span class="pref-area-lbl">{a.l}</span><div class="pref-chips">{#each a.o as opt}<button onclick={() => a.s(a.g() === opt ? '' : opt)} class="chip chip-sm" class:chip-on={a.g() === opt}>{opt}</button>{/each}</div></div>
+									<div class="pref-area-row">
+										<span class="pref-area-label">{a.l}</span>
+										{#each a.o as opt}<button onclick={() => a.s(a.g() === opt ? '' : opt)} class="chip" class:chip-on={a.g() === opt}>{opt}</button>{/each}
+									</div>
 								{/each}
 							</div>
 
@@ -728,8 +731,8 @@
 	.pref-group:last-of-type { margin-bottom: 20px; }
 	.pref-title { display: block; font-size: 12px; font-weight: 600; color: var(--color-rosys-fg); margin-bottom: 8px; }
 	.pref-chips { display: flex; gap: 6px; flex-wrap: wrap; }
-	.pref-area { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-	.pref-area-lbl { font-size: 11px; color: var(--color-rosys-fg-muted); width: 40px; flex-shrink: 0; }
+	.pref-area-row { display: grid; grid-template-columns: 50px 1fr 1fr; gap: 6px; align-items: center; margin-bottom: 6px; }
+	.pref-area-label { font-size: 12px; font-weight: 500; color: var(--color-rosys-fg-muted); }
 
 	.chip { flex: 1; min-width: 0; padding: 11px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s; background: var(--color-warm-50); color: var(--color-rosys-fg-muted); border: 1px solid color-mix(in srgb, var(--color-rosys-border) 40%, transparent); text-align: center; }
 	.chip:hover { border-color: var(--color-rosys-300); background: var(--color-rosys-50); }
