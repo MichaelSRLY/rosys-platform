@@ -426,7 +426,18 @@
 
 	<!-- RESULTS — visual components, no raw text -->
 	{:else if phase === 'results'}
-		<div class="fade-in results">
+		<!-- Refining overlay -->
+		{#if isRefining}
+			<div class="refine-overlay">
+				<div class="refine-modal">
+					<div class="refine-orb"><div class="refine-orb-inner"></div></div>
+					<h2 class="refine-title">Updating your recommendation</h2>
+					<p class="refine-sub">Re-analyzing with your preferences...</p>
+					<div class="refine-bar"><div class="refine-bar-fill"></div></div>
+				</div>
+			</div>
+		{/if}
+		<div class="fade-in results" class:results-blur={isRefining}>
 
 			<!-- SIZE HERO -->
 			{#if recommendedSize}
@@ -832,6 +843,29 @@
 	.an-thinking-bar { height: 3px; border-radius: 2px; background: var(--color-warm-200); overflow: hidden; }
 	.an-thinking-fill { height: 100%; width: 40%; border-radius: 2px; background: linear-gradient(90deg, var(--color-rosys-300), var(--color-rosys-500)); animation: thinkSlide 2s ease-in-out infinite; }
 	@keyframes thinkSlide { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+
+	/* Refine overlay */
+	.refine-overlay {
+		position: fixed; inset: 0; z-index: 50;
+		display: flex; align-items: center; justify-content: center;
+		background: rgba(0,0,0,0.2);
+		backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+		animation: fadeIn 0.25s ease-out;
+	}
+	@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+	.refine-modal {
+		background: white; border-radius: 20px; padding: 32px 36px;
+		box-shadow: 0 20px 60px rgba(0,0,0,0.15); text-align: center;
+		max-width: 320px; width: 90%; animation: modalPop 0.3s cubic-bezier(0.34,1.56,0.64,1);
+	}
+	@keyframes modalPop { from { opacity: 0; transform: scale(0.9) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+	.refine-orb { width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, var(--color-rosys-100), var(--color-rosys-200)); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
+	.refine-orb-inner { width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, var(--color-rosys-400), var(--color-rosys-500)); animation: orbPulse 1.5s ease-in-out infinite; }
+	.refine-title { font-size: 17px; font-weight: 700; color: var(--color-rosys-fg); margin: 0 0 4px; letter-spacing: -0.02em; }
+	.refine-sub { font-size: 13px; color: var(--color-rosys-fg-muted); margin: 0 0 18px; }
+	.refine-bar { height: 3px; border-radius: 2px; background: var(--color-warm-200); overflow: hidden; }
+	.refine-bar-fill { height: 100%; width: 40%; border-radius: 2px; background: linear-gradient(90deg, var(--color-rosys-300), var(--color-rosys-500)); animation: thinkSlide 1.8s ease-in-out infinite; }
+	.results-blur { filter: blur(4px); pointer-events: none; transition: filter 0.25s ease; }
 
 	/* RESULTS */
 	.results > * { animation: fadeUp 0.3s ease-out both; }
