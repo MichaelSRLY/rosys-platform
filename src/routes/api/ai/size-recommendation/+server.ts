@@ -54,7 +54,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	try {
 		const res = await fetch(
-			`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+			`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${geminiKey}`,
 			{
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -154,7 +154,7 @@ async function fallbackLLMRecommendation(body: MeasurementInput) {
 	const prompt = `You are a sewing pattern size assistant. The customer measures Bust: ${body.bust}cm, Waist: ${body.waist}cm, Hip: ${body.hip}cm${body.height ? `, Height: ${body.height}cm` : ''}. Give general sizing advice based on standard size charts (XXS: bust 72, XS: 76, S: 82, M: 88, L: 92, XL: 96, 2XL: 100). Be concise and warm.`;
 
 	const res = await fetch(
-		`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+		`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${geminiKey}`,
 		{
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
