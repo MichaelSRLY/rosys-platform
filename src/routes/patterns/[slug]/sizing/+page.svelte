@@ -157,21 +157,39 @@
 		}
 	}
 
+	let customFitFiles = $state<any[]>([]);
+
 	async function calculateCustomFit() {
-		customFitLoading = true; customFitError = ''; customFitGrading = null;
-		try { const res = await fetch('/api/patterns/generate-custom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pattern_slug: pattern.pattern_slug, bust: parseFloat(bust), waist: parseFloat(waist), hip: parseFloat(hip) }) });
+		customFitLoading = true; customFitError = ''; customFitGrading = null; customFitFiles = [];
+		try {
+			// First get grading preview
+			let res = await fetch('/api/patterns/generate-custom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pattern_slug: pattern.pattern_slug, bust: parseFloat(bust), waist: parseFloat(waist), hip: parseFloat(hip) }) });
 			if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Failed');
-			const json = await res.json(); customFitGrading = json.grading; customFitError = json.error || '';
+			const json = await res.json();
+			customFitGrading = json.grading; customFitError = json.error || '';
+
+			// Then generate all formats to get file list
+			if (!customFitError) {
+				res = await fetch('/api/patterns/generate-custom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pattern_slug: pattern.pattern_slug, bust: parseFloat(bust), waist: parseFloat(waist), hip: parseFloat(hip), generate: true }) });
+				if (res.ok) {
+					const gen = await res.json();
+					customFitFiles = gen.files || [];
+				}
+			}
 		} catch (e: any) { customFitError = e.message; } finally { customFitLoading = false; }
 	}
 
-	async function downloadCustomDxf() {
-		customFitLoading = true;
-		try { const res = await fetch('/api/patterns/generate-custom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pattern_slug: pattern.pattern_slug, bust: parseFloat(bust), waist: parseFloat(waist), hip: parseFloat(hip), generate: true }) });
-			if (!res.ok) throw new Error('Download failed'); const blob = await res.blob(); const cd = res.headers.get('content-disposition');
-			const filename = cd?.match(/filename="(.+)"/)?.[1] || `${pattern.pattern_slug}-custom.dxf`;
+	let downloadingFormat = $state('');
+	async function downloadCustomFile(format: string) {
+		downloadingFormat = format;
+		try {
+			const res = await fetch('/api/patterns/generate-custom', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ pattern_slug: pattern.pattern_slug, bust: parseFloat(bust), waist: parseFloat(waist), hip: parseFloat(hip), generate: true, format }) });
+			if (!res.ok) throw new Error('Download failed');
+			const blob = await res.blob(); const cd = res.headers.get('content-disposition');
+			const filename = cd?.match(/filename="(.+)"/)?.[1] || `${pattern.pattern_slug}-custom.pdf`;
 			const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
-		} catch (e: any) { customFitError = e.message; } finally { customFitLoading = false; }
+		} catch (e: any) { customFitError = e.message; } finally { downloadingFormat = ''; }
 	}
 
 	function reset() { phase = 'entry'; deterministicResult = null; streamedText = ''; refinedText = ''; profile = null; chartData = null; errorMsg = ''; showPreferences = false; sizeLocked = false; showCustomFit = false; customFitGrading = null; analysisStep = 0; fitPreference = bustPref = waistPref = hipPref = lengthPref = fabricStretch = ''; }
@@ -701,9 +719,26 @@
 									</table>
 								</div>
 								{#if customFitError}<div class="err-box mb-3">{customFitError}</div>
-								{:else}<button disabled={customFitLoading} onclick={downloadCustomDxf} class="btn-violet w-full">
-									{#if customFitLoading}<Loader2 class="w-4 h-4 animate-spin" strokeWidth={2} />Generating...{:else}<Download class="w-4 h-4" strokeWidth={2} />Download Custom DXF{/if}
-								</button>{/if}
+								{:else}
+									<span class="card-label mb-2 block">Download custom-fit pattern</span>
+									<div class="dl-grid">
+										{#each [
+											{ f: 'a0', l: 'A0', s: 'Print shop' },
+											{ f: 'a4', l: 'A4', s: 'Home' },
+											{ f: 'us_letter', l: 'US Letter', s: 'Home' },
+										] as dl}
+											<button onclick={() => downloadCustomFile(dl.f)} disabled={!!downloadingFormat} class="dl-btn custom-dl-btn">
+												{#if downloadingFormat === dl.f}
+													<Loader2 class="w-4 h-4 animate-spin text-violet-400" strokeWidth={2} />
+												{:else}
+													<Download class="w-4 h-4 text-violet-400" strokeWidth={1.5} />
+												{/if}
+												<strong>{dl.l}</strong>
+												<span>{dl.s}</span>
+											</button>
+										{/each}
+									</div>
+								{/if}
 							{/if}
 						</div>
 					{/if}
@@ -1001,6 +1036,9 @@
 	.custom-btn strong { font-size: 14px; color: var(--color-rosys-fg); }
 	.custom-panel { background: white; border-radius: 16px; padding: 20px; border: 1px solid #ddd6fe30; margin-bottom: 16px; }
 	.custom-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 24px 0; font-size: 14px; color: var(--color-rosys-fg-muted); }
+	.custom-dl-btn { background: linear-gradient(to bottom, #faf5ff, white) !important; border-color: #ddd6fe80 !important; cursor: pointer; }
+	.custom-dl-btn:hover { background: #f5f3ff !important; border-color: #c4b5fd !important; }
+	.custom-dl-btn :global(svg) { color: #a78bfa !important; }
 
 	/* Prose */
 	:global(.rec-body p) { font-size: 14px; line-height: 1.65; color: var(--color-rosys-fg-secondary); margin-bottom: 2px; }

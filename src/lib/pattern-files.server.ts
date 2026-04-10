@@ -6,13 +6,14 @@
 import { createClient } from '@supabase/supabase-js';
 import { env } from '$env/dynamic/private';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
+import { PDFDocument } from 'pdf-lib';
 
 function getAdmin() {
 	return createClient(PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_KEY || '');
 }
 
 export interface PatternFile {
-	format: 'dxf';
+	format: 'a0' | 'a4' | 'us_letter' | 'dxf';
 	label: string;
 	filename: string;
 	data: Uint8Array;
@@ -25,28 +26,49 @@ interface ScaleFactors {
 }
 
 /**
- * Find the DXF file for a pattern.
+ * Find all available pattern files for a slug.
  */
-async function findDxfFile(slug: string): Promise<{ path: string; name: string } | null> {
+async function listPatternFiles(slug: string): Promise<{ format: string; path: string; name: string }[]> {
 	const admin = getAdmin();
+	const formats = [
+		{ format: 'a0', folder: 'a0' },
+		{ format: 'a4', folder: 'a4' },
+		{ format: 'us_letter', folder: 'us_letter' },
+		{ format: 'dxf', folder: 'dxf' }
+	];
 
-	for (const folder of ['dxf', 'dxf ']) {
-		const { data: files } = await admin.storage
-			.from('pattern-files')
-			.list(`${slug}/${folder}`, { limit: 5 });
+	const found: { format: string; path: string; name: string }[] = [];
 
-		if (!files) continue;
-		const dxf = files.find(f => f.name.endsWith('.dxf'));
-		if (dxf) return { path: `${slug}/${folder}/${dxf.name}`, name: dxf.name };
+	for (const fmt of formats) {
+		for (const folder of [fmt.folder, `${fmt.folder} `]) {
+			const { data: files } = await admin.storage
+				.from('pattern-files')
+				.list(`${slug}/${folder}`, { limit: 5 });
+
+			if (!files) continue;
+
+			const target = files.find(f =>
+				f.name.endsWith('.pdf') || f.name.endsWith('.dxf')
+			);
+
+			if (target) {
+				found.push({
+					format: fmt.format,
+					path: `${slug}/${folder}/${target.name}`,
+					name: target.name
+				});
+				break;
+			}
+		}
 	}
 
-	return null;
+	return found;
 }
 
 /**
- * Download a file from Supabase storage as text.
+ * Download a file from Supabase storage.
  */
-async function downloadFileText(path: string): Promise<string> {
+async function downloadFile(path: string): Promise<Uint8Array> {
 	const admin = getAdmin();
 	const { data, error } = await admin.storage
 		.from('pattern-files')
@@ -56,28 +78,47 @@ async function downloadFileText(path: string): Promise<string> {
 		throw new Error(`Download failed for ${path}: ${error?.message}`);
 	}
 
-	return await data.text();
+	const buffer = await data.arrayBuffer();
+	return new Uint8Array(buffer);
+}
+
+/**
+ * Scale a PDF by applying a transformation to all pages.
+ * Uses pdf-lib to modify the page content stream scaling.
+ */
+async function scalePdf(
+	pdfBytes: Uint8Array,
+	scale: ScaleFactors,
+): Promise<Uint8Array> {
+	const doc = await PDFDocument.load(pdfBytes);
+	const pages = doc.getPages();
+
+	for (const page of pages) {
+		const { width, height } = page.getSize();
+		const newWidth = width * scale.width;
+		const newHeight = height * scale.height;
+		page.setSize(newWidth, newHeight);
+		page.scaleContent(scale.width, scale.height);
+	}
+
+	return await doc.save();
 }
 
 /**
  * Scale a DXF file by modifying vertex coordinates.
- * Normalizes line endings and scales all geometry around each block's center.
  */
 function scaleDxf(
 	dxfContent: string,
 	scale: ScaleFactors,
 	customLabel: string
 ): string {
-	// Normalize Windows line endings
 	let content = dxfContent.replace(/\r\n/g, '\n');
 
-	// Find each BLOCK section
 	const blockPattern = /(\n\s*0\nBLOCK\n[\s\S]*?\n\s*2\n\s*)(\S+)([\s\S]*?\n\s*0\nENDBLK)/g;
 
 	content = content.replace(blockPattern, (fullMatch, prefix, blockName, blockContent) => {
 		if (blockName.startsWith('*')) return fullMatch;
 
-		// Find center of polyline geometry in this block
 		const coordPairs: { x: number; y: number }[] = [];
 		const vertexPattern = /\n\s*0\nVERTEX\n\s*8\n\s*\w+\n\s*10\n\s*([\d.-]+)\n\s*20\n\s*([\d.-]+)/g;
 		let vm;
@@ -90,7 +131,6 @@ function scaleDxf(
 		const cx = coordPairs.reduce((s, p) => s + p.x, 0) / coordPairs.length;
 		const cy = coordPairs.reduce((s, p) => s + p.y, 0) / coordPairs.length;
 
-		// Scale VERTEX coordinates
 		let scaled = blockContent.replace(
 			/(\n\s*0\nVERTEX\n\s*8\n\s*\w+\n\s*10\n\s*)([\d.-]+)(\n\s*20\n\s*)([\d.-]+)/g,
 			(...m: string[]) => {
@@ -100,7 +140,6 @@ function scaleDxf(
 			}
 		);
 
-		// Scale LINE coordinates
 		scaled = scaled.replace(
 			/(\n\s*0\nLINE\n\s*8\n\s*\w+\n\s*10\n\s*)([\d.-]+)(\n\s*20\n\s*)([\d.-]+)(\n\s*11\n\s*)([\d.-]+)(\n\s*21\n\s*)([\d.-]+)/g,
 			(...m: string[]) => {
@@ -108,7 +147,6 @@ function scaleDxf(
 			}
 		);
 
-		// Scale POINT coordinates
 		scaled = scaled.replace(
 			/(\n\s*0\nPOINT\n\s*8\n\s*\w+\n\s*10\n\s*)([\d.-]+)(\n\s*20\n\s*)([\d.-]+)/g,
 			(...m: string[]) => {
@@ -116,7 +154,6 @@ function scaleDxf(
 			}
 		);
 
-		// Scale TEXT insert positions
 		scaled = scaled.replace(
 			/(\n\s*0\nTEXT\n\s*8\n\s*\w+\n\s*10\n\s*)([\d.-]+)(\n\s*20\n\s*)([\d.-]+)/g,
 			(...m: string[]) => {
@@ -124,7 +161,6 @@ function scaleDxf(
 			}
 		);
 
-		// Update Size label
 		scaled = scaled.replace(/(\n\s*1\n\s*)Size: .+/g, `$1Size: ${customLabel}`);
 
 		return `${prefix}${blockName}${scaled}`;
@@ -134,31 +170,72 @@ function scaleDxf(
 }
 
 /**
- * Generate a custom-fit DXF pattern file.
- * Only DXF is supported for custom scaling — DXF files contain a single size,
- * so proportional scaling produces an accurate custom-fit pattern.
- * Multi-size PDFs should NOT be scaled (it would make 6 of 7 size lines wrong).
+ * Generate custom-fit pattern files in all available formats.
+ * PDFs are scaled using pdf-lib page transforms.
+ * DXF is scaled by modifying geometry coordinates.
  */
+export async function generateCustomPatternFiles(
+	patternSlug: string,
+	patternName: string,
+	scale: ScaleFactors,
+	customLabel: string
+): Promise<PatternFile[]> {
+	const available = await listPatternFiles(patternSlug);
+	if (available.length === 0) {
+		throw new Error(`No pattern files found for ${patternSlug}`);
+	}
+
+	const results: PatternFile[] = [];
+	const cleanName = patternName.toLowerCase().replace(/\s+/g, '-');
+
+	const formatLabels: Record<string, string> = {
+		a0: 'A0 Pattern Sheet',
+		a4: 'A4 Tiled Pattern',
+		us_letter: 'US Letter Tiled Pattern',
+		dxf: 'DXF Cutting File'
+	};
+
+	for (const file of available) {
+		try {
+			const raw = await downloadFile(file.path);
+
+			if (file.format === 'dxf') {
+				const text = new TextDecoder().decode(raw);
+				const scaled = scaleDxf(text, scale, customLabel);
+				results.push({
+					format: 'dxf',
+					label: formatLabels.dxf,
+					filename: `${cleanName}-custom-fit.dxf`,
+					data: new TextEncoder().encode(scaled),
+					mimeType: 'application/dxf'
+				});
+			} else {
+				const scaled = await scalePdf(raw, scale);
+				results.push({
+					format: file.format as PatternFile['format'],
+					label: formatLabels[file.format] || file.format,
+					filename: `${cleanName}-custom-fit-${file.format}.pdf`,
+					data: new Uint8Array(scaled),
+					mimeType: 'application/pdf'
+				});
+			}
+		} catch (e: any) {
+			console.error(`Failed to process ${file.format} for ${patternSlug}:`, e.message);
+		}
+	}
+
+	return results;
+}
+
+// Keep the DXF-only export for backwards compatibility
 export async function generateCustomDxfFile(
 	patternSlug: string,
 	patternName: string,
 	scale: ScaleFactors,
 	customLabel: string
 ): Promise<PatternFile> {
-	const dxfFile = await findDxfFile(patternSlug);
-	if (!dxfFile) {
-		throw new Error(`No DXF file found for ${patternSlug}`);
-	}
-
-	const raw = await downloadFileText(dxfFile.path);
-	const scaled = scaleDxf(raw, scale, customLabel);
-	const cleanName = patternName.toLowerCase().replace(/\s+/g, '-');
-
-	return {
-		format: 'dxf',
-		label: 'Custom-Fit DXF Pattern',
-		filename: `${cleanName}-custom-fit.dxf`,
-		data: new TextEncoder().encode(scaled),
-		mimeType: 'application/dxf'
-	};
+	const files = await generateCustomPatternFiles(patternSlug, patternName, scale, customLabel);
+	const dxf = files.find(f => f.format === 'dxf');
+	if (!dxf) throw new Error(`No DXF file found for ${patternSlug}`);
+	return dxf;
 }
