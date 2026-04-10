@@ -5,162 +5,169 @@
 		hips: number;
 		height: number;
 		units?: string;
-		profile?: {
-			shoulder_cm?: number;
-			arm_length_cm?: number;
-			leg_length_cm?: number;
-		} | null;
 	}
 
-	let { bust, waist, hips, height, units = 'cm', profile = null }: Props = $props();
+	let { bust, waist, hips, height, units = 'cm' }: Props = $props();
 
 	// Animated counters
 	let bustDisplay = $state(0);
 	let waistDisplay = $state(0);
 	let hipsDisplay = $state(0);
 	let heightDisplay = $state(0);
-	let shoulderDisplay = $state(0);
 
-	// Visibility states
-	let showSilhouette = $state(false);
+	// Visibility
+	let show = $state(false);
 	let showBust = $state(false);
 	let showWaist = $state(false);
 	let showHip = $state(false);
 	let showHeight = $state(false);
-	let showProfile = $state(false);
 
-	function animate(from: number, to: number, duration: number, cb: (v: number) => void) {
+	function animate(to: number, duration: number, cb: (v: number) => void) {
 		const start = performance.now();
 		function tick(now: number) {
 			const t = Math.min((now - start) / duration, 1);
-			const eased = 1 - Math.pow(1 - t, 3);
-			cb(from + (to - from) * eased);
+			cb(to * (1 - Math.pow(1 - t, 3)));
 			if (t < 1) requestAnimationFrame(tick);
 		}
 		requestAnimationFrame(tick);
 	}
 
 	$effect(() => {
-		setTimeout(() => showSilhouette = true, 100);
-		setTimeout(() => { showBust = true; animate(0, bust, 800, v => bustDisplay = v); }, 800);
-		setTimeout(() => { showWaist = true; animate(0, waist, 800, v => waistDisplay = v); }, 1300);
-		setTimeout(() => { showHip = true; animate(0, hips, 800, v => hipsDisplay = v); }, 1800);
-		setTimeout(() => { showHeight = true; animate(0, height, 800, v => heightDisplay = v); }, 2300);
-		if (profile?.shoulder_cm) {
-			setTimeout(() => { showProfile = true; animate(0, profile!.shoulder_cm!, 800, v => shoulderDisplay = v); }, 2800);
-		}
+		setTimeout(() => show = true, 200);
+		setTimeout(() => { showBust = true; animate(bust, 900, v => bustDisplay = v); }, 700);
+		setTimeout(() => { showWaist = true; animate(waist, 900, v => waistDisplay = v); }, 1200);
+		setTimeout(() => { showHip = true; animate(hips, 900, v => hipsDisplay = v); }, 1700);
+		setTimeout(() => { showHeight = true; animate(height, 900, v => heightDisplay = v); }, 2200);
 	});
 </script>
 
-<div class="relative w-full max-w-[220px] mx-auto select-none">
-	<svg viewBox="0 0 200 360" class="w-full h-auto" aria-label="Body measurement diagram">
+<div class="body-viz" style="opacity: {show ? 1 : 0}">
+	<!-- Measurement cards arranged around a central icon -->
+	<div class="body-center">
+		<!-- Simple, elegant dress form icon -->
+		<svg viewBox="0 0 80 160" class="dress-form" aria-hidden="true">
+			<defs>
+				<linearGradient id="formGrad" x1="0" y1="0" x2="0" y2="1">
+					<stop offset="0%" stop-color="var(--color-rosys-200, #ffc2d1)" />
+					<stop offset="100%" stop-color="var(--color-rosys-100, #ffe0e6)" />
+				</linearGradient>
+			</defs>
+			<!-- Dress form silhouette — clean, fashion-illustration style -->
+			<path d="M 40 8 C 44 8, 47 11, 47 15 C 47 19, 44 22, 40 22 C 36 22, 33 19, 33 15 C 33 11, 36 8, 40 8 Z" fill="url(#formGrad)" />
+			<path d="M 37 22 L 37 26 C 37 26, 24 30, 22 38 C 20 46, 22 52, 24 56 C 26 60, 30 62, 32 62 C 32 66, 30 72, 28 78 C 26 84, 24 88, 24 92 C 24 96, 26 100, 28 104 L 28 140 C 28 144, 30 146, 32 146 L 34 146 L 34 140 C 34 134, 36 128, 38 124 C 38.5 123, 39.5 122, 40 122 C 40.5 122, 41.5 123, 42 124 C 44 128, 46 134, 46 140 L 46 146 L 48 146 C 50 146, 52 144, 52 140 L 52 104 C 54 100, 56 96, 56 92 C 56 88, 54 84, 52 78 C 50 72, 48 66, 48 62 C 50 62, 54 60, 56 56 C 58 52, 60 46, 58 38 C 56 30, 43 26, 43 26 L 43 22"
+				fill="url(#formGrad)" stroke="var(--color-rosys-300, #ff94ac)" stroke-width="0.5" stroke-linejoin="round" />
+		</svg>
+	</div>
 
-		<!-- Feminine body silhouette — clean, minimal, fashion-illustration style -->
-		<g style="opacity: {showSilhouette ? 1 : 0}; transition: opacity 0.8s ease;">
-			<!-- Head -->
-			<ellipse cx="100" cy="28" rx="12" ry="14" fill="none" stroke="var(--color-rosys-300, #ff94ac)" stroke-width="1.2" />
-			<!-- Neck -->
-			<line x1="95" y1="42" x2="95" y2="52" stroke="var(--color-rosys-300, #ff94ac)" stroke-width="1.2" />
-			<line x1="105" y1="42" x2="105" y2="52" stroke="var(--color-rosys-300, #ff94ac)" stroke-width="1.2" />
-			<!-- Left side -->
-			<path d="M 95 52 C 85 52, 68 56, 64 62 C 60 68, 60 78, 62 88 C 64 98, 66 100, 68 102 C 72 108, 78 110, 80 112 C 84 116, 86 120, 86 124 C 86 128, 82 134, 78 140 C 74 146, 72 150, 72 156 C 72 162, 74 170, 76 176 C 78 182, 80 186, 80 192 C 80 198, 78 210, 76 222 C 74 234, 72 246, 72 258 C 72 270, 74 280, 76 290 C 78 300, 80 310, 82 320 C 83 326, 84 330, 86 336 L 86 346 L 94 346 L 92 336 C 90 326, 90 316, 92 306 C 94 296, 96 286, 98 276"
-				fill="none" stroke="var(--color-rosys-300, #ff94ac)" stroke-width="1.2" stroke-linejoin="round" />
-			<!-- Right side -->
-			<path d="M 105 52 C 115 52, 132 56, 136 62 C 140 68, 140 78, 138 88 C 136 98, 134 100, 132 102 C 128 108, 122 110, 120 112 C 116 116, 114 120, 114 124 C 114 128, 118 134, 122 140 C 126 146, 128 150, 128 156 C 128 162, 126 170, 124 176 C 122 182, 120 186, 120 192 C 120 198, 122 210, 124 222 C 126 234, 128 246, 128 258 C 128 270, 126 280, 124 290 C 122 300, 120 310, 118 320 C 117 326, 116 330, 114 336 L 114 346 L 106 346 L 108 336 C 110 326, 110 316, 108 306 C 106 296, 104 286, 102 276"
-				fill="none" stroke="var(--color-rosys-300, #ff94ac)" stroke-width="1.2" stroke-linejoin="round" />
-			<!-- Connect legs at bottom center -->
-			<path d="M 98 276 C 99 272, 101 272, 102 276" fill="none" stroke="var(--color-rosys-300, #ff94ac)" stroke-width="1.2" />
-		</g>
+	<!-- Measurement labels -->
+	<div class="measurements">
+		<div class="measure-row" style="opacity: {showBust ? 1 : 0}; transform: translateY({showBust ? 0 : 8}px)">
+			<div class="measure-dot"></div>
+			<div class="measure-info">
+				<span class="measure-label">Bust</span>
+				<span class="measure-value">{bustDisplay.toFixed(1)}<span class="measure-unit"> {units}</span></span>
+			</div>
+		</div>
 
-		<!-- Bust line -->
-		<g style="opacity: {showBust ? 1 : 0}; transition: opacity 0.4s ease;">
-			<line x1="12" y1="100" x2="62" y2="100" stroke="var(--color-rosys-400, #ff5c82)" stroke-width="0.8" stroke-dasharray="3 2" />
-			<line x1="138" y1="100" x2="188" y2="100" stroke="var(--color-rosys-400, #ff5c82)" stroke-width="0.8" stroke-dasharray="3 2" />
-			<circle cx="62" cy="100" r="2" fill="var(--color-rosys-400, #ff5c82)" />
-			<circle cx="138" cy="100" r="2" fill="var(--color-rosys-400, #ff5c82)" />
-		</g>
-		<g style="opacity: {showBust ? 1 : 0}; transition: opacity 0.5s ease 0.2s;">
-			<text x="12" y="95" class="label">BUST</text>
-			<text x="12" y="108" class="value">{bustDisplay.toFixed(1)} {units}</text>
-		</g>
+		<div class="measure-row" style="opacity: {showWaist ? 1 : 0}; transform: translateY({showWaist ? 0 : 8}px)">
+			<div class="measure-dot"></div>
+			<div class="measure-info">
+				<span class="measure-label">Waist</span>
+				<span class="measure-value">{waistDisplay.toFixed(1)}<span class="measure-unit"> {units}</span></span>
+			</div>
+		</div>
 
-		<!-- Waist line -->
-		<g style="opacity: {showWaist ? 1 : 0}; transition: opacity 0.4s ease;">
-			<line x1="12" y1="148" x2="72" y2="148" stroke="var(--color-rosys-400, #ff5c82)" stroke-width="0.8" stroke-dasharray="3 2" />
-			<line x1="128" y1="148" x2="188" y2="148" stroke="var(--color-rosys-400, #ff5c82)" stroke-width="0.8" stroke-dasharray="3 2" />
-			<circle cx="72" cy="148" r="2" fill="var(--color-rosys-400, #ff5c82)" />
-			<circle cx="128" cy="148" r="2" fill="var(--color-rosys-400, #ff5c82)" />
-		</g>
-		<g style="opacity: {showWaist ? 1 : 0}; transition: opacity 0.5s ease 0.2s;">
-			<text x="12" y="143" class="label">WAIST</text>
-			<text x="12" y="156" class="value">{waistDisplay.toFixed(1)} {units}</text>
-		</g>
+		<div class="measure-row" style="opacity: {showHip ? 1 : 0}; transform: translateY({showHip ? 0 : 8}px)">
+			<div class="measure-dot"></div>
+			<div class="measure-info">
+				<span class="measure-label">Hip</span>
+				<span class="measure-value">{hipsDisplay.toFixed(1)}<span class="measure-unit"> {units}</span></span>
+			</div>
+		</div>
 
-		<!-- Hip line -->
-		<g style="opacity: {showHip ? 1 : 0}; transition: opacity 0.4s ease;">
-			<line x1="12" y1="198" x2="72" y2="198" stroke="var(--color-rosys-400, #ff5c82)" stroke-width="0.8" stroke-dasharray="3 2" />
-			<line x1="128" y1="198" x2="188" y2="198" stroke="var(--color-rosys-400, #ff5c82)" stroke-width="0.8" stroke-dasharray="3 2" />
-			<circle cx="72" cy="198" r="2" fill="var(--color-rosys-400, #ff5c82)" />
-			<circle cx="128" cy="198" r="2" fill="var(--color-rosys-400, #ff5c82)" />
-		</g>
-		<g style="opacity: {showHip ? 1 : 0}; transition: opacity 0.5s ease 0.2s;">
-			<text x="12" y="193" class="label">HIP</text>
-			<text x="12" y="206" class="value">{hipsDisplay.toFixed(1)} {units}</text>
-		</g>
-
-		<!-- Height (right side) -->
-		<g style="opacity: {showHeight ? 1 : 0}; transition: opacity 0.4s ease;">
-			<line x1="178" y1="16" x2="178" y2="346" stroke="var(--color-rosys-300, #ff94ac)" stroke-width="0.6" stroke-dasharray="3 2" />
-			<line x1="174" y1="16" x2="182" y2="16" stroke="var(--color-rosys-400, #ff5c82)" stroke-width="1" />
-			<line x1="174" y1="346" x2="182" y2="346" stroke="var(--color-rosys-400, #ff5c82)" stroke-width="1" />
-		</g>
-		<g style="opacity: {showHeight ? 1 : 0}; transition: opacity 0.5s ease 0.2s;">
-			<text x="183" y="178" class="label" transform="rotate(90 183 178)">HEIGHT</text>
-			<text x="183" y="192" class="value" transform="rotate(90 183 192)">{heightDisplay.toFixed(1)} {units}</text>
-		</g>
-
-		<!-- Shoulder (predicted) -->
-		{#if profile?.shoulder_cm}
-			<g style="opacity: {showProfile ? 1 : 0}; transition: opacity 0.5s ease;">
-				<line x1="64" y1="62" x2="136" y2="62" stroke="var(--color-rosys-200, #ffc2d1)" stroke-width="0.8" stroke-dasharray="2 2" />
-				<circle cx="64" cy="62" r="1.5" fill="var(--color-rosys-200, #ffc2d1)" />
-				<circle cx="136" cy="62" r="1.5" fill="var(--color-rosys-200, #ffc2d1)" />
-				<text x="143" y="58" class="label-sm">SHOULDER</text>
-				<text x="143" y="67" class="value-sm">{shoulderDisplay.toFixed(1)}</text>
-			</g>
-		{/if}
-	</svg>
+		<div class="measure-row" style="opacity: {showHeight ? 1 : 0}; transform: translateY({showHeight ? 0 : 8}px)">
+			<div class="measure-dot dot-muted"></div>
+			<div class="measure-info">
+				<span class="measure-label">Height</span>
+				<span class="measure-value">{heightDisplay.toFixed(1)}<span class="measure-unit"> {units}</span></span>
+			</div>
+		</div>
+	</div>
 </div>
 
 <style>
-	.label {
-		font-size: 7px;
+	.body-viz {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 2rem;
+		padding: 1.5rem 0;
+		transition: opacity 0.6s ease;
+	}
+
+	.body-center {
+		flex-shrink: 0;
+	}
+
+	.dress-form {
+		width: 100px;
+		height: 200px;
+		filter: drop-shadow(0 2px 8px rgba(232, 54, 109, 0.08));
+	}
+
+	.measurements {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.measure-row {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		transition: opacity 0.5s ease, transform 0.5s ease;
+	}
+
+	.measure-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--color-rosys-400, #ff5c82);
+		flex-shrink: 0;
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-rosys-400, #ff5c82) 15%, transparent);
+	}
+
+	.dot-muted {
+		background: var(--color-rosys-300, #ff94ac);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-rosys-300, #ff94ac) 12%, transparent);
+	}
+
+	.measure-info {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+	}
+
+	.measure-label {
+		font-size: 10px;
 		font-weight: 600;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		fill: var(--color-rosys-fg-faint, #999);
-		font-family: var(--font-ui, Inter, sans-serif);
+		color: var(--color-rosys-fg-faint, #999);
 	}
-	.value {
-		font-size: 9px;
+
+	.measure-value {
+		font-size: 20px;
 		font-weight: 700;
-		fill: var(--color-rosys-fg, #1a1a1a);
-		font-family: var(--font-ui, Inter, sans-serif);
+		color: var(--color-rosys-fg, #1a1a1a);
 		font-variant-numeric: tabular-nums;
+		letter-spacing: -0.02em;
+		line-height: 1;
 	}
-	.label-sm {
-		font-size: 6px;
-		font-weight: 600;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		fill: var(--color-rosys-300, #ff94ac);
-		font-family: var(--font-ui, Inter, sans-serif);
-	}
-	.value-sm {
-		font-size: 8px;
-		font-weight: 600;
-		fill: var(--color-rosys-400, #ff5c82);
-		font-family: var(--font-ui, Inter, sans-serif);
-		font-variant-numeric: tabular-nums;
+
+	.measure-unit {
+		font-size: 12px;
+		font-weight: 500;
+		color: var(--color-rosys-fg-faint, #999);
 	}
 </style>
