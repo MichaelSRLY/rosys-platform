@@ -104,29 +104,62 @@ export function matchSize(
 ): SizeRecommendation {
 	const matches: SizeMatch[] = [];
 
-	for (const bodyRow of chart.body) {
-		const size = bodyRow.size;
-		const bustFit = makeFit('Bust', bust, bodyRow.bust_cm ? Number(bodyRow.bust_cm) : null);
-		const waistFit = makeFit('Waist', waist, bodyRow.waist_cm ? Number(bodyRow.waist_cm) : null);
-		const hipFit = makeFit('Hip', hip, bodyRow.hip_cm ? Number(bodyRow.hip_cm) : null);
+	// Detect if body chart has actual data or is all nulls
+	const hasBodyData = chart.body.some(
+		(r) => r.bust_cm !== null || r.waist_cm !== null || r.hip_cm !== null
+	);
+
+	// Use body chart if available, otherwise fall back to finished measurements
+	// (some patterns only have finished garment measurements)
+	const matchRows = hasBodyData ? chart.body : chart.finished;
+
+	for (const row of matchRows) {
+		const size = row.size;
+		const bustFit = makeFit('Bust', bust, row.bust_cm ? Number(row.bust_cm) : null);
+		const waistFit = makeFit('Waist', waist, row.waist_cm ? Number(row.waist_cm) : null);
+		const hipFit = makeFit('Hip', hip, row.hip_cm ? Number(row.hip_cm) : null);
 
 		// Score: weighted sum of absolute differences (bust matters most for most garments)
-		const bustDiff = bustFit ? Math.abs(bustFit.diff_cm) : 0;
-		const waistDiff = waistFit ? Math.abs(waistFit.diff_cm) : 0;
-		const hipDiff = hipFit ? Math.abs(hipFit.diff_cm) : 0;
+		// When matching against finished measurements (no body chart), penalize sizes
+		// where the garment is smaller than the body — you can't wear a dress that's
+		// 10cm smaller than your bust, even if the "difference" is small.
+		const bustRaw = bustFit ? bustFit.diff_cm : 0;
+		const waistRaw = waistFit ? waistFit.diff_cm : 0;
+		const hipRaw = hipFit ? hipFit.diff_cm : 0;
+
+		let bustDiff: number, waistDiff: number, hipDiff: number;
+		if (!hasBodyData) {
+			// Matching on finished: negative diff = garment smaller than body = bad
+			bustDiff = bustRaw < 0 ? Math.abs(bustRaw) * 2.5 : Math.abs(bustRaw);
+			waistDiff = waistRaw < 0 ? Math.abs(waistRaw) * 2 : Math.abs(waistRaw);
+			hipDiff = hipRaw < 0 ? Math.abs(hipRaw) * 2.5 : Math.abs(hipRaw);
+		} else {
+			bustDiff = Math.abs(bustRaw);
+			waistDiff = Math.abs(waistRaw);
+			hipDiff = Math.abs(hipRaw);
+		}
 		const score = bustDiff * 1.5 + waistDiff * 1.0 + hipDiff * 1.2;
 
 		// Calculate ease from finished measurements
-		const finRow = chart.finished.find((f) => f.size === size);
+		const bodyRow = hasBodyData ? row : null;
+		const finRow = hasBodyData
+			? chart.finished.find((f) => f.size === size)
+			: row; // when matching on finished, the row IS the finished row
 		const ease = {
-			bust_cm: finRow?.bust_cm && bodyRow.bust_cm
-				? Number(finRow.bust_cm) - Number(bodyRow.bust_cm)
+			bust_cm: finRow?.bust_cm
+				? bodyRow?.bust_cm
+					? Number(finRow.bust_cm) - Number(bodyRow.bust_cm)
+					: Number(finRow.bust_cm) - bust  // ease = finished - user body
 				: null,
-			waist_cm: finRow?.waist_cm && bodyRow.waist_cm
-				? Number(finRow.waist_cm) - Number(bodyRow.waist_cm)
+			waist_cm: finRow?.waist_cm
+				? bodyRow?.waist_cm
+					? Number(finRow.waist_cm) - Number(bodyRow.waist_cm)
+					: Number(finRow.waist_cm) - waist
 				: null,
-			hip_cm: finRow?.hip_cm && bodyRow.hip_cm
-				? Number(finRow.hip_cm) - Number(bodyRow.hip_cm)
+			hip_cm: finRow?.hip_cm
+				? bodyRow?.hip_cm
+					? Number(finRow.hip_cm) - Number(bodyRow.hip_cm)
+					: Number(finRow.hip_cm) - hip
 				: null
 		};
 
