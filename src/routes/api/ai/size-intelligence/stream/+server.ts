@@ -139,18 +139,25 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					? FOLLOWUP_SYSTEM_PROMPT
 					: INITIAL_SYSTEM_PROMPT;
 
-				// Build message content — text + finished garment images (vision)
-				const messageContent: any[] = [{ type: 'text', text: prompt }];
-
-				// Add up to 2 finished garment images so the AI can SEE the dress
+				// Build message content — text + optionally finished garment images (vision)
+				// Only include images that are actually accessible
+				const verifiedImageUrls: string[] = [];
 				for (const url of imageUrls.slice(0, 2)) {
+					try {
+						const check = await fetch(url, { method: 'HEAD' });
+						if (check.ok) verifiedImageUrls.push(url);
+					} catch {}
+				}
+
+				const messageContent: any[] = [{ type: 'text', text: prompt }];
+				for (const url of verifiedImageUrls) {
 					messageContent.push({
 						type: 'image',
 						source: { type: 'url', url },
 					});
 				}
 
-				const res = await fetch('https://api.anthropic.com/v1/messages', {
+				let res = await fetch('https://api.anthropic.com/v1/messages', {
 					method: 'POST',
 					headers: {
 						'x-api-key': apiKey,
@@ -165,6 +172,25 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						messages: [{ role: 'user', content: messageContent }],
 					}),
 				});
+
+				// If images caused a failure, retry without them
+				if (!res.ok && verifiedImageUrls.length > 0) {
+					res = await fetch('https://api.anthropic.com/v1/messages', {
+						method: 'POST',
+						headers: {
+							'x-api-key': apiKey,
+							'anthropic-version': '2023-06-01',
+							'content-type': 'application/json',
+						},
+						body: JSON.stringify({
+							model: 'claude-sonnet-4-6',
+							max_tokens: 1500,
+							stream: true,
+							system: systemPrompt,
+							messages: [{ role: 'user', content: prompt }],
+						}),
+					});
+				}
 
 				if (!res.ok) {
 					const errText = await res.text().catch(() => '');

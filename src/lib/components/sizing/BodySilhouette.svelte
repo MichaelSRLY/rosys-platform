@@ -20,22 +20,20 @@
 	let hipsDisplay = $state(0);
 	let heightDisplay = $state(0);
 	let shoulderDisplay = $state(0);
-	let armDisplay = $state(0);
-	let legDisplay = $state(0);
 
-	// Draw-in progress (0→1)
-	let silhouetteProgress = $state(0);
-	let bustLine = $state(0);
-	let waistLine = $state(0);
-	let hipLine = $state(0);
-	let heightLine = $state(0);
-	let profileLines = $state(0);
+	// Visibility states
+	let showSilhouette = $state(false);
+	let showBust = $state(false);
+	let showWaist = $state(false);
+	let showHip = $state(false);
+	let showHeight = $state(false);
+	let showProfile = $state(false);
 
-	function animateValue(from: number, to: number, duration: number, cb: (v: number) => void) {
+	function animate(from: number, to: number, duration: number, cb: (v: number) => void) {
 		const start = performance.now();
 		function tick(now: number) {
 			const t = Math.min((now - start) / duration, 1);
-			const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+			const eased = 1 - Math.pow(1 - t, 3);
 			cb(from + (to - from) * eased);
 			if (t < 1) requestAnimationFrame(tick);
 		}
@@ -43,144 +41,126 @@
 	}
 
 	$effect(() => {
-		// Staggered animation sequence
-		animateValue(0, 1, 1000, (v) => silhouetteProgress = v);
-
-		setTimeout(() => {
-			bustLine = 1;
-			animateValue(0, bust, 700, (v) => bustDisplay = v);
-		}, 600);
-
-		setTimeout(() => {
-			waistLine = 1;
-			animateValue(0, waist, 700, (v) => waistDisplay = v);
-		}, 1000);
-
-		setTimeout(() => {
-			hipLine = 1;
-			animateValue(0, hips, 700, (v) => hipsDisplay = v);
-		}, 1400);
-
-		setTimeout(() => {
-			heightLine = 1;
-			animateValue(0, height, 700, (v) => heightDisplay = v);
-		}, 1800);
-
-		// Predicted measurements
-		if (profile) {
-			setTimeout(() => {
-				profileLines = 1;
-				if (profile!.shoulder_cm) animateValue(0, profile!.shoulder_cm, 700, (v) => shoulderDisplay = v);
-				if (profile!.arm_length_cm) animateValue(0, profile!.arm_length_cm, 700, (v) => armDisplay = v);
-				if (profile!.leg_length_cm) animateValue(0, profile!.leg_length_cm, 700, (v) => legDisplay = v);
-			}, 2400);
+		setTimeout(() => showSilhouette = true, 100);
+		setTimeout(() => { showBust = true; animate(0, bust, 800, v => bustDisplay = v); }, 800);
+		setTimeout(() => { showWaist = true; animate(0, waist, 800, v => waistDisplay = v); }, 1300);
+		setTimeout(() => { showHip = true; animate(0, hips, 800, v => hipsDisplay = v); }, 1800);
+		setTimeout(() => { showHeight = true; animate(0, height, 800, v => heightDisplay = v); }, 2300);
+		if (profile?.shoulder_cm) {
+			setTimeout(() => { showProfile = true; animate(0, profile!.shoulder_cm!, 800, v => shoulderDisplay = v); }, 2800);
 		}
 	});
 </script>
 
-<div class="relative w-full max-w-[260px] mx-auto">
-	<svg viewBox="0 0 280 420" class="w-full h-auto" aria-label="Body measurement diagram">
-		<!-- Body silhouette -->
-		<path
-			d="M 140 30 C 140 30, 125 30, 125 45 L 125 50 C 125 55, 130 58, 132 60 L 120 62 C 105 65, 95 80, 92 95 L 88 120 C 86 130, 88 135, 90 140 L 95 160 C 98 170, 100 175, 100 180 L 98 210 C 96 230, 95 240, 98 260 L 100 280 C 102 295, 105 310, 108 320 L 110 340 C 112 355, 115 370, 118 385 L 120 400 L 130 400 L 128 380 C 126 365, 128 350, 130 340 L 135 310 C 137 300, 138 290, 140 280 C 142 290, 143 300, 145 310 L 150 340 C 152 350, 154 365, 152 380 L 150 400 L 160 400 L 162 385 C 165 370, 168 355, 170 340 L 172 320 C 175 310, 178 295, 180 280 L 182 260 C 185 240, 184 230, 182 210 L 180 180 C 180 175, 182 170, 185 160 L 190 140 C 192 135, 194 130, 192 120 L 188 95 C 185 80, 175 65, 160 62 L 148 60 C 150 58, 155 55, 155 50 L 155 45 C 155 30, 140 30, 140 30 Z"
-			fill="none"
-			stroke="#e8366d"
-			stroke-width="1.5"
-			stroke-linejoin="round"
-			stroke-dasharray="1200"
-			stroke-dashoffset={1200 * (1 - silhouetteProgress)}
-			style="filter: drop-shadow(0 0 4px rgba(232,54,109,0.15)); transition: stroke-dashoffset 0.05s linear;"
-		/>
+<div class="relative w-full max-w-[220px] mx-auto select-none">
+	<svg viewBox="0 0 200 360" class="w-full h-auto" aria-label="Body measurement diagram">
 
-		<!-- Bust measurement line -->
-		<line x1="60" y1="115" x2="88" y2="115" stroke="#e8366d" stroke-width="1.5" stroke-dasharray="4 2"
-			opacity={bustLine} style="transition: opacity 0.3s ease;" />
-		<line x1="192" y1="115" x2="220" y2="115" stroke="#e8366d" stroke-width="1.5" stroke-dasharray="4 2"
-			opacity={bustLine} style="transition: opacity 0.3s ease;" />
-		<g opacity={bustLine} style="transition: opacity 0.4s ease 0.2s;">
-			<text x="16" y="112" class="text-[10px] uppercase tracking-wider" fill="#999">Bust</text>
-			<text x="16" y="126" class="text-[11px] font-semibold tabular-nums" fill="#333">
-				{bustDisplay.toFixed(1)} {units}
-			</text>
+		<!-- Feminine body silhouette — clean, minimal, fashion-illustration style -->
+		<g style="opacity: {showSilhouette ? 1 : 0}; transition: opacity 0.8s ease;">
+			<!-- Head -->
+			<ellipse cx="100" cy="28" rx="12" ry="14" fill="none" stroke="var(--color-rosys-300, #ff94ac)" stroke-width="1.2" />
+			<!-- Neck -->
+			<line x1="95" y1="42" x2="95" y2="52" stroke="var(--color-rosys-300, #ff94ac)" stroke-width="1.2" />
+			<line x1="105" y1="42" x2="105" y2="52" stroke="var(--color-rosys-300, #ff94ac)" stroke-width="1.2" />
+			<!-- Left side -->
+			<path d="M 95 52 C 85 52, 68 56, 64 62 C 60 68, 60 78, 62 88 C 64 98, 66 100, 68 102 C 72 108, 78 110, 80 112 C 84 116, 86 120, 86 124 C 86 128, 82 134, 78 140 C 74 146, 72 150, 72 156 C 72 162, 74 170, 76 176 C 78 182, 80 186, 80 192 C 80 198, 78 210, 76 222 C 74 234, 72 246, 72 258 C 72 270, 74 280, 76 290 C 78 300, 80 310, 82 320 C 83 326, 84 330, 86 336 L 86 346 L 94 346 L 92 336 C 90 326, 90 316, 92 306 C 94 296, 96 286, 98 276"
+				fill="none" stroke="var(--color-rosys-300, #ff94ac)" stroke-width="1.2" stroke-linejoin="round" />
+			<!-- Right side -->
+			<path d="M 105 52 C 115 52, 132 56, 136 62 C 140 68, 140 78, 138 88 C 136 98, 134 100, 132 102 C 128 108, 122 110, 120 112 C 116 116, 114 120, 114 124 C 114 128, 118 134, 122 140 C 126 146, 128 150, 128 156 C 128 162, 126 170, 124 176 C 122 182, 120 186, 120 192 C 120 198, 122 210, 124 222 C 126 234, 128 246, 128 258 C 128 270, 126 280, 124 290 C 122 300, 120 310, 118 320 C 117 326, 116 330, 114 336 L 114 346 L 106 346 L 108 336 C 110 326, 110 316, 108 306 C 106 296, 104 286, 102 276"
+				fill="none" stroke="var(--color-rosys-300, #ff94ac)" stroke-width="1.2" stroke-linejoin="round" />
+			<!-- Connect legs at bottom center -->
+			<path d="M 98 276 C 99 272, 101 272, 102 276" fill="none" stroke="var(--color-rosys-300, #ff94ac)" stroke-width="1.2" />
 		</g>
 
-		<!-- Waist measurement line -->
-		<line x1="60" y1="175" x2="98" y2="175" stroke="#e8366d" stroke-width="1.5" stroke-dasharray="4 2"
-			opacity={waistLine} style="transition: opacity 0.3s ease;" />
-		<line x1="182" y1="175" x2="220" y2="175" stroke="#e8366d" stroke-width="1.5" stroke-dasharray="4 2"
-			opacity={waistLine} style="transition: opacity 0.3s ease;" />
-		<g opacity={waistLine} style="transition: opacity 0.4s ease 0.2s;">
-			<text x="16" y="172" class="text-[10px] uppercase tracking-wider" fill="#999">Waist</text>
-			<text x="16" y="186" class="text-[11px] font-semibold tabular-nums" fill="#333">
-				{waistDisplay.toFixed(1)} {units}
-			</text>
+		<!-- Bust line -->
+		<g style="opacity: {showBust ? 1 : 0}; transition: opacity 0.4s ease;">
+			<line x1="12" y1="100" x2="62" y2="100" stroke="var(--color-rosys-400, #ff5c82)" stroke-width="0.8" stroke-dasharray="3 2" />
+			<line x1="138" y1="100" x2="188" y2="100" stroke="var(--color-rosys-400, #ff5c82)" stroke-width="0.8" stroke-dasharray="3 2" />
+			<circle cx="62" cy="100" r="2" fill="var(--color-rosys-400, #ff5c82)" />
+			<circle cx="138" cy="100" r="2" fill="var(--color-rosys-400, #ff5c82)" />
+		</g>
+		<g style="opacity: {showBust ? 1 : 0}; transition: opacity 0.5s ease 0.2s;">
+			<text x="12" y="95" class="label">BUST</text>
+			<text x="12" y="108" class="value">{bustDisplay.toFixed(1)} {units}</text>
 		</g>
 
-		<!-- Hip measurement line -->
-		<line x1="60" y1="245" x2="96" y2="245" stroke="#e8366d" stroke-width="1.5" stroke-dasharray="4 2"
-			opacity={hipLine} style="transition: opacity 0.3s ease;" />
-		<line x1="184" y1="245" x2="220" y2="245" stroke="#e8366d" stroke-width="1.5" stroke-dasharray="4 2"
-			opacity={hipLine} style="transition: opacity 0.3s ease;" />
-		<g opacity={hipLine} style="transition: opacity 0.4s ease 0.2s;">
-			<text x="16" y="242" class="text-[10px] uppercase tracking-wider" fill="#999">Hip</text>
-			<text x="16" y="256" class="text-[11px] font-semibold tabular-nums" fill="#333">
-				{hipsDisplay.toFixed(1)} {units}
-			</text>
+		<!-- Waist line -->
+		<g style="opacity: {showWaist ? 1 : 0}; transition: opacity 0.4s ease;">
+			<line x1="12" y1="148" x2="72" y2="148" stroke="var(--color-rosys-400, #ff5c82)" stroke-width="0.8" stroke-dasharray="3 2" />
+			<line x1="128" y1="148" x2="188" y2="148" stroke="var(--color-rosys-400, #ff5c82)" stroke-width="0.8" stroke-dasharray="3 2" />
+			<circle cx="72" cy="148" r="2" fill="var(--color-rosys-400, #ff5c82)" />
+			<circle cx="128" cy="148" r="2" fill="var(--color-rosys-400, #ff5c82)" />
+		</g>
+		<g style="opacity: {showWaist ? 1 : 0}; transition: opacity 0.5s ease 0.2s;">
+			<text x="12" y="143" class="label">WAIST</text>
+			<text x="12" y="156" class="value">{waistDisplay.toFixed(1)} {units}</text>
 		</g>
 
-		<!-- Height line (right side, vertical) -->
-		<line x1="240" y1="30" x2="240" y2="400" stroke="#c4245a" stroke-width="1" stroke-dasharray="4 2"
-			opacity={heightLine} style="transition: opacity 0.3s ease;" />
-		<line x1="236" y1="30" x2="244" y2="30" stroke="#c4245a" stroke-width="1.5"
-			opacity={heightLine} style="transition: opacity 0.3s ease;" />
-		<line x1="236" y1="400" x2="244" y2="400" stroke="#c4245a" stroke-width="1.5"
-			opacity={heightLine} style="transition: opacity 0.3s ease;" />
-		<g opacity={heightLine} style="transition: opacity 0.4s ease 0.2s;">
-			<text x="248" y="218" class="text-[10px] uppercase tracking-wider" fill="#999"
-				transform="rotate(90 248 218)">Height</text>
-			<text x="248" y="235" class="text-[11px] font-semibold tabular-nums" fill="#333"
-				transform="rotate(90 248 235)">
-				{heightDisplay.toFixed(1)} {units}
-			</text>
+		<!-- Hip line -->
+		<g style="opacity: {showHip ? 1 : 0}; transition: opacity 0.4s ease;">
+			<line x1="12" y1="198" x2="72" y2="198" stroke="var(--color-rosys-400, #ff5c82)" stroke-width="0.8" stroke-dasharray="3 2" />
+			<line x1="128" y1="198" x2="188" y2="198" stroke="var(--color-rosys-400, #ff5c82)" stroke-width="0.8" stroke-dasharray="3 2" />
+			<circle cx="72" cy="198" r="2" fill="var(--color-rosys-400, #ff5c82)" />
+			<circle cx="128" cy="198" r="2" fill="var(--color-rosys-400, #ff5c82)" />
+		</g>
+		<g style="opacity: {showHip ? 1 : 0}; transition: opacity 0.5s ease 0.2s;">
+			<text x="12" y="193" class="label">HIP</text>
+			<text x="12" y="206" class="value">{hipsDisplay.toFixed(1)} {units}</text>
 		</g>
 
-		<!-- Predicted measurements (MLP) -->
+		<!-- Height (right side) -->
+		<g style="opacity: {showHeight ? 1 : 0}; transition: opacity 0.4s ease;">
+			<line x1="178" y1="16" x2="178" y2="346" stroke="var(--color-rosys-300, #ff94ac)" stroke-width="0.6" stroke-dasharray="3 2" />
+			<line x1="174" y1="16" x2="182" y2="16" stroke="var(--color-rosys-400, #ff5c82)" stroke-width="1" />
+			<line x1="174" y1="346" x2="182" y2="346" stroke="var(--color-rosys-400, #ff5c82)" stroke-width="1" />
+		</g>
+		<g style="opacity: {showHeight ? 1 : 0}; transition: opacity 0.5s ease 0.2s;">
+			<text x="183" y="178" class="label" transform="rotate(90 183 178)">HEIGHT</text>
+			<text x="183" y="192" class="value" transform="rotate(90 183 192)">{heightDisplay.toFixed(1)} {units}</text>
+		</g>
+
+		<!-- Shoulder (predicted) -->
 		{#if profile?.shoulder_cm}
-			<line x1="105" y1="68" x2="175" y2="68" stroke="#ff94ac" stroke-width="1" stroke-dasharray="3 2"
-				opacity={profileLines} style="transition: opacity 0.3s ease;" />
-			<g opacity={profileLines} style="transition: opacity 0.4s ease 0.2s;">
-				<text x="225" y="60" class="text-[8px] uppercase tracking-wider" fill="#999">Shoulder</text>
-				<text x="225" y="72" class="text-[10px] font-medium tabular-nums" fill="#ff5c82">
-					{shoulderDisplay.toFixed(1)} {units}
-				</text>
-			</g>
-		{/if}
-
-		{#if profile?.arm_length_cm}
-			<g opacity={profileLines} style="transition: opacity 0.4s ease 0.4s;">
-				<text x="16" y="296" class="text-[8px] uppercase tracking-wider" fill="#999">Arm</text>
-				<text x="16" y="308" class="text-[10px] font-medium tabular-nums" fill="#ff5c82">
-					{armDisplay.toFixed(1)} {units}
-				</text>
-			</g>
-		{/if}
-
-		{#if profile?.leg_length_cm}
-			<g opacity={profileLines} style="transition: opacity 0.4s ease 0.6s;">
-				<text x="16" y="360" class="text-[8px] uppercase tracking-wider" fill="#999">Inseam</text>
-				<text x="16" y="372" class="text-[10px] font-medium tabular-nums" fill="#ff5c82">
-					{legDisplay.toFixed(1)} {units}
-				</text>
+			<g style="opacity: {showProfile ? 1 : 0}; transition: opacity 0.5s ease;">
+				<line x1="64" y1="62" x2="136" y2="62" stroke="var(--color-rosys-200, #ffc2d1)" stroke-width="0.8" stroke-dasharray="2 2" />
+				<circle cx="64" cy="62" r="1.5" fill="var(--color-rosys-200, #ffc2d1)" />
+				<circle cx="136" cy="62" r="1.5" fill="var(--color-rosys-200, #ffc2d1)" />
+				<text x="143" y="58" class="label-sm">SHOULDER</text>
+				<text x="143" y="67" class="value-sm">{shoulderDisplay.toFixed(1)}</text>
 			</g>
 		{/if}
 	</svg>
-
-	<!-- Predicted badge -->
-	{#if profile}
-		<div class="text-center mt-1" style="opacity: {profileLines}; transition: opacity 0.4s ease 0.8s;">
-			<span class="text-[10px] text-rosys-fg-faint">
-				Additional measurements predicted from 59,000 body records
-			</span>
-		</div>
-	{/if}
 </div>
+
+<style>
+	.label {
+		font-size: 7px;
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		fill: var(--color-rosys-fg-faint, #999);
+		font-family: var(--font-ui, Inter, sans-serif);
+	}
+	.value {
+		font-size: 9px;
+		font-weight: 700;
+		fill: var(--color-rosys-fg, #1a1a1a);
+		font-family: var(--font-ui, Inter, sans-serif);
+		font-variant-numeric: tabular-nums;
+	}
+	.label-sm {
+		font-size: 6px;
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		fill: var(--color-rosys-300, #ff94ac);
+		font-family: var(--font-ui, Inter, sans-serif);
+	}
+	.value-sm {
+		font-size: 8px;
+		font-weight: 600;
+		fill: var(--color-rosys-400, #ff5c82);
+		font-family: var(--font-ui, Inter, sans-serif);
+		font-variant-numeric: tabular-nums;
+	}
+</style>
