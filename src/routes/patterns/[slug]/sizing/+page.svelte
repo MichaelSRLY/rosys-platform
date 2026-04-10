@@ -42,6 +42,14 @@
 	let height = $state(savedProfile?.height_cm?.toString() ?? '');
 	let errorMsg = $state('');
 
+	// Editable body profile (auto-filled from MLP, customer can override)
+	let shoulder = $state('');
+	let armLength = $state('');
+	let legLength = $state('');
+	let profileLoading = $state(false);
+	let profilePredicted = $state(false); // true = values came from MLP, not user
+	let showBodyFields = $state(false);
+
 	let deterministicResult = $state<any>(null);
 	let streamedText = $state('');
 	let isStreaming = $state(false);
@@ -113,7 +121,7 @@
 		}
 	}
 
-	function startAnalysis() { analysisStep = 1; phase = 'analyzing'; isStreaming = true; streamedText = ''; errorMsg = ''; startStreaming(); }
+	function startAnalysis() { analysisStep = 1; phase = 'analyzing'; isStreaming = true; streamedText = ''; errorMsg = ''; saveProfile(); startStreaming(); }
 
 	async function startStreaming() {
 		try {
@@ -157,6 +165,41 @@
 
 	function reset() { phase = 'entry'; deterministicResult = null; streamedText = ''; refinedText = ''; profile = null; chartData = null; errorMsg = ''; showPreferences = false; sizeLocked = false; showCustomFit = false; customFitGrading = null; analysisStep = 0; fitPreference = bustPref = waistPref = hipPref = lengthPref = fabricStretch = ''; }
 	$effect(() => { if (savedProfile && bust && waist && hip) phase = 'measurements'; });
+
+	// Auto-predict body profile when all 4 measurements are filled
+	async function predictProfile() {
+		if (!bust || !waist || !hip || !height) return;
+		profileLoading = true;
+		try {
+			const res = await fetch('/api/ai/body-profile', {
+				method: 'POST', headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ bust: parseFloat(bust), waist: parseFloat(waist), hip: parseFloat(hip), height: parseFloat(height) })
+			});
+			if (res.ok) {
+				const { profile: p } = await res.json();
+				// Only auto-fill if user hasn't manually entered values
+				if (!shoulder) { shoulder = p.shoulder_cm?.toString() ?? ''; profilePredicted = true; }
+				if (!armLength) { armLength = p.arm_length_cm?.toString() ?? ''; }
+				if (!legLength) { legLength = p.leg_length_cm?.toString() ?? ''; }
+				showBodyFields = true;
+			}
+		} catch {} finally { profileLoading = false; }
+	}
+
+	// Save measurement profile after successful analysis
+	async function saveProfile() {
+		try {
+			await fetch('/profile/measurements?/save', {
+				method: 'POST',
+				body: new URLSearchParams({
+					name: 'Sizing Assistant',
+					bust_cm: bust, waist_cm: waist, hip_cm: hip, height_cm: height,
+					shoulder_width_cm: shoulder, arm_length_cm: armLength, inseam_cm: legLength,
+					source: 'manual'
+				})
+			});
+		} catch {} // Silent — non-critical
+	}
 </script>
 
 <svelte:head><title>Find Your Size — {pattern.pattern_name}</title></svelte:head>
@@ -216,6 +259,49 @@
 					</div>
 				{/each}
 			</div>
+			<!-- Body profile section (auto-predicted, editable) -->
+			{#if canSubmit && height}
+				{#if !showBodyFields && !profileLoading}
+					<button onclick={predictProfile} class="body-predict-btn">
+						<Zap class="w-4 h-4 text-violet-500" strokeWidth={1.5} />
+						<span>Predict full body profile</span>
+						<span class="sz-muted">shoulder, arms, legs</span>
+					</button>
+				{/if}
+
+				{#if profileLoading}
+					<div class="body-loading"><Loader2 class="w-4 h-4 animate-spin text-violet-400" strokeWidth={2} /><span class="sz-muted">Predicting body profile...</span></div>
+				{/if}
+
+				{#if showBodyFields}
+					<div class="body-fields page-enter">
+						<div class="body-fields-head">
+							<span class="pref-title">Body profile</span>
+							{#if profilePredicted}<span class="pill violet" style="font-size:9px">Auto-predicted</span>{/if}
+						</div>
+						<div class="body-fields-grid">
+							{#each [
+								{ id: 'shoulder', label: 'Shoulder', ph: '38', get: () => shoulder, set: (v: string) => { shoulder = v; profilePredicted = false; } },
+								{ id: 'arm', label: 'Arm length', ph: '60', get: () => armLength, set: (v: string) => { armLength = v; profilePredicted = false; } },
+								{ id: 'leg', label: 'Leg length', ph: '75', get: () => legLength, set: (v: string) => { legLength = v; profilePredicted = false; } },
+							] as f}
+								<div>
+									<label for={f.id} class="body-field-label">{f.label}</label>
+									<div class="input-wrap">
+										<input id={f.id} type="number" inputmode="numeric" placeholder={f.ph} value={f.get()} oninput={(e) => f.set((e.target as HTMLInputElement).value)} class="body-input" />
+										<span class="unit">cm</span>
+									</div>
+								</div>
+							{/each}
+						</div>
+						<p class="body-note">
+							{#if profilePredicted}Predicted from 59,000 body records. Edit any value to override.
+							{:else}Using your custom values.{/if}
+						</p>
+					</div>
+				{/if}
+			{/if}
+
 			{#if errorMsg}<p class="err">{errorMsg}</p>{/if}
 			<button disabled={!canSubmit} onclick={startAnalysis} class="btn-primary w-full"><Sparkles class="w-5 h-5" strokeWidth={2} />Analyze my fit</button>
 			{#if savedProfile}<p class="sz-note"><Check class="w-3 h-3 inline text-emerald-500" strokeWidth={2} /> Saved measurements loaded</p>{/if}
@@ -588,6 +674,19 @@
 	.fields input:focus { border-color: var(--color-rosys-400); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-rosys-400) 12%, transparent); }
 	.fields input::placeholder { color: color-mix(in srgb, var(--color-rosys-fg-faint) 40%, transparent); }
 	.unit { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); font-size: 13px; color: var(--color-rosys-fg-faint); pointer-events: none; }
+
+	/* Body profile fields */
+	.body-predict-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px dashed color-mix(in srgb, var(--color-rosys-border) 60%, transparent); background: var(--color-warm-50); cursor: pointer; transition: all 0.15s; margin-bottom: 6px; }
+	.body-predict-btn:hover { border-color: #c4b5fd; background: #f5f3ff; }
+	.body-predict-btn span:first-of-type { font-size: 13px; font-weight: 500; color: var(--color-rosys-fg); }
+	.body-loading { display: flex; align-items: center; gap: 8px; justify-content: center; padding: 14px; }
+	.body-fields { background: var(--color-warm-50); border-radius: 14px; padding: 16px; border: 1px solid color-mix(in srgb, var(--color-rosys-border) 30%, transparent); margin-bottom: 6px; }
+	.body-fields-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+	.body-fields-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+	.body-field-label { display: block; font-size: 11px; font-weight: 500; color: var(--color-rosys-fg-muted); margin-bottom: 4px; }
+	.body-input { width: 100%; padding: 10px 36px 10px 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--color-rosys-border) 50%, transparent); font-size: 15px; color: var(--color-rosys-fg); background: white; outline: none; transition: all 0.15s; }
+	.body-input:focus { border-color: #a78bfa; box-shadow: 0 0 0 3px rgba(167,139,250,0.1); }
+	.body-note { font-size: 11px; color: var(--color-rosys-fg-faint); margin-top: 8px; }
 
 	/* Buttons */
 	.btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 16px 24px; border-radius: 16px; font-size: 16px; font-weight: 600; color: white; border: none; cursor: pointer; background: linear-gradient(135deg, var(--color-rosys-500), var(--color-rosys-600)); box-shadow: 0 4px 16px -2px color-mix(in srgb, var(--color-rosys-500) 30%, transparent); transition: all 0.15s; }
