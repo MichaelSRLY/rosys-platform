@@ -145,10 +145,15 @@
 		} catch (e: any) { errorMsg = e.message || 'Connection failed.'; }
 		finally {
 			isRefining = false;
-			showPreferences = false; // collapse prefs so updated cards are visible
-			// Wait for overlay to dismiss and DOM to update, then scroll
-			await new Promise(r => setTimeout(r, 300));
-			window.scrollTo({ top: 0, behavior: 'smooth' });
+			showPreferences = false;
+			// Force scroll after DOM settles
+			requestAnimationFrame(() => {
+				requestAnimationFrame(() => {
+					document.documentElement.scrollTop = 0;
+					document.body.scrollTop = 0;
+					window.scrollTo(0, 0);
+				});
+			});
 		}
 	}
 
