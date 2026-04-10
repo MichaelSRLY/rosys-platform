@@ -143,11 +143,13 @@
 			if (!res.ok) { errorMsg = 'Refinement failed.'; isRefining = false; return; }
 			await consumeStream(res);
 		} catch (e: any) { errorMsg = e.message || 'Connection failed.'; }
-		finally { isRefining = false; scrollToResults(); }
-	}
-
-	function scrollToResults() {
-		setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
+		finally {
+			isRefining = false;
+			showPreferences = false; // collapse prefs so updated cards are visible
+			// Wait for overlay to dismiss and DOM to update, then scroll
+			await new Promise(r => setTimeout(r, 300));
+			window.scrollTo({ top: 0, behavior: 'smooth' });
+		}
 	}
 
 	async function calculateCustomFit() {
