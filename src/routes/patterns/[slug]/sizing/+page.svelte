@@ -190,7 +190,8 @@
 						hip_preference: hipPref || undefined,
 						length_preference: lengthPref || undefined,
 						fabric_stretch: fabricStretch || undefined,
-					}
+					},
+					previous_recommendation: streamedText || undefined,
 				})
 			});
 

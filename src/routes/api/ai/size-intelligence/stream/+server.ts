@@ -7,7 +7,7 @@
  *   3. "done"          — stream complete
  *   4. "error"         — on failure
  *
- * Accepts optional `preferences` for re-analysis after follow-up questions.
+ * Accepts optional `preferences` + `previous_recommendation` for re-analysis.
  */
 
 import { error } from '@sveltejs/kit';
@@ -25,7 +25,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.session) throw error(401, 'Not authenticated');
 
 	const body = await request.json();
-	const { pattern_slug, bust, waist, hip, height, source, preferences } = body;
+	const { pattern_slug, bust, waist, hip, height, source, preferences, previous_recommendation } = body;
 
 	if (!pattern_slug || !bust || !waist || !hip) {
 		throw error(400, 'pattern_slug, bust, waist, and hip are required');
@@ -50,17 +50,28 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					try { profile = predictBodyProfile(bust, waist, hip, height); } catch {}
 				}
 
-				// Pattern name + category
+				// ── Gather ALL pattern context ──
 				const patternInfo = await query<{ pattern_name: string }>(
 					`SELECT pattern_name FROM cs_pattern_catalog WHERE pattern_slug = $1`, [pattern_slug]
 				);
 
-				// DXF piece info if available
-				const dxfChunks = await query<{ description: string; metadata: string }>(
-					`SELECT description, metadata::text FROM cs_pattern_embeddings
-					 WHERE pattern_slug = $1 AND chunk_type = 'dxf_pattern_piece' LIMIT 1`,
+				// Product identity, instructions, DXF pieces, size chart text — everything
+				const embeddings = await query<{ chunk_type: string; description: string; metadata: string }>(
+					`SELECT chunk_type, description, metadata::text FROM cs_pattern_embeddings
+					 WHERE pattern_slug = $1
+					 AND chunk_type IN ('product_identity', 'instructions_text', 'dxf_pattern_piece', 'size_chart_text')
+					 ORDER BY chunk_type, chunk_index`,
 					[pattern_slug]
 				);
+
+				const patternContext: Record<string, string[]> = {};
+				for (const e of embeddings) {
+					if (!patternContext[e.chunk_type]) patternContext[e.chunk_type] = [];
+					patternContext[e.chunk_type].push(e.description);
+				}
+
+				// Check DXF availability
+				const hasDxf = embeddings.some(e => e.chunk_type === 'dxf_pattern_piece');
 
 				send('deterministic', {
 					recommended_size: match.recommended.size,
@@ -93,23 +104,22 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 							sleeve_length_cm: r.sleeve_length_cm ? Number(r.sleeve_length_cm) : null,
 						})),
 					},
-					has_dxf: dxfChunks.length > 0,
+					has_dxf: hasDxf,
 				});
 
 				// ── 2. Stream AI narrative ──
 				const prompt = buildPrompt(
 					bust, waist, hip, height, match, chart,
 					patternInfo[0]?.pattern_name || pattern_slug,
-					source, profile, preferences
+					source, profile, patternContext, preferences, previous_recommendation
 				);
 
 				const apiKey = env.ANTHROPIC_API_KEY;
 				if (!apiKey) {
-					// No API key — send deterministic summary as fallback
 					send('chunk', `## Recommended Size\nSize ${match.recommended.size}\n\n`);
 					send('chunk', `## Why This Size\nBased on your measurements (bust ${bust}cm, waist ${waist}cm, hip ${hip}cm), size ${match.recommended.size} is the best fit for this pattern.\n\n`);
 					if (match.betweenSizes) {
-						send('chunk', `## Between Sizes?\nYou fall between ${match.lowerSize} and ${match.upperSize}. We recommend ${match.recommended.size} for the best balance of comfort and fit.\n\n`);
+						send('chunk', `## Between Sizes?\nYou fall between ${match.lowerSize} and ${match.upperSize}. We recommend ${match.recommended.size} for the best balance.\n\n`);
 					}
 					send('done', {});
 					controller.close();
@@ -129,7 +139,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					},
 					body: JSON.stringify({
 						model: 'claude-sonnet-4-6',
-						max_tokens: 1200,
+						max_tokens: 1500,
 						stream: true,
 						system: systemPrompt,
 						messages: [{ role: 'user', content: prompt }],
@@ -143,7 +153,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					return;
 				}
 
-				// Parse SSE from Anthropic
 				const reader = res.body!.getReader();
 				const decoder = new TextDecoder();
 				let buffer = '';
@@ -192,57 +201,65 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 const INITIAL_SYSTEM_PROMPT = `You are the Rosys Patterns sizing expert — warm, knowledgeable, and specific. You're advising a friend who sews.
 
+You have access to the FULL pattern data: what the garment looks like, how it's constructed, what fabrics work, the exact finished measurements, and the pattern pieces. Use ALL of this to give precise, garment-aware advice.
+
 Write your response using these EXACT markdown headers in this order:
 
 ## Recommended Size
 State the size clearly (e.g., "Size M"). Be definitive.
 
 ## Why This Size
-Explain your reasoning using the customer's specific measurements. Reference bust, waist, and hip values. Mention ease and how the garment is designed to fit.
+Explain using the customer's measurements against the finished garment data. Mention ease — how much room the garment gives beyond their body. Reference the garment type (fitted dress vs loose coat = different logic).
 
 ## Fit by Measurement
-For each measurement, give a brief assessment:
-- **Bust**: [how it fits — snug, comfortable, roomy]
-- **Waist**: [how it fits]
-- **Hip**: [how it fits]
+- **Bust**: [finished measurement at this size vs their body — snug, comfortable, roomy, and why]
+- **Waist**: [same]
+- **Hip**: [same]
 
 ## Between Sizes?
-If the customer falls between sizes, explain both options. If they clearly fit one size, say "You're solidly in this size."
+If between sizes, explain both options and recommend one based on garment type and construction. If solidly in one size, say so.
 
 ## Adjustments to Consider
-Suggest length or width adjustments based on their height and proportions. If none needed, say so briefly.
+Based on their height vs the garment's full length. Also consider shoulder width if the garment has set-in sleeves, or bottom sweep for A-line silhouettes.
 
 ## Garment Notes
-Pattern-specific tips about ease, fabric choice, or construction that affect fit.
+Fabric-specific advice (stretch vs woven affects size choice). Construction details that affect fit (darts, zipper, slit, lining). Anything the sewer should know.
 
 Rules:
-- Never use jargon (DXF, MLP, grading, ease calculation)
-- Keep each section 2-3 sentences max
+- Never use jargon (DXF, MLP, grading, ease calculation, embeddings)
+- Keep each section 2-4 sentences max
 - Be warm and helpful, not clinical
-- Reference specific numbers from their measurements`;
+- Reference specific numbers from their measurements AND the garment data
+- If body chart is empty but finished measurements exist, work with finished measurements (ease = finished - body)`;
 
-const FOLLOWUP_SYSTEM_PROMPT = `You are the Rosys Patterns sizing expert. The customer has already received an initial recommendation and has now provided fit preferences (e.g., wanting more room, preferring shorter length, using stretch fabric).
+const FOLLOWUP_SYSTEM_PROMPT = `You are the Rosys Patterns sizing expert. The customer already received a recommendation and has now provided fit preferences.
 
-Re-analyze their size based on these preferences. Your response should:
+You have:
+1. The customer's measurements
+2. The full pattern data (construction, fabric, finished measurements)
+3. The PREVIOUS recommendation the AI gave
+4. The customer's new preferences
+
+Re-analyze considering their preferences. Your response:
 
 ## Updated Recommendation
-State whether the size changes or stays the same. Be clear: "Still Size M" or "Now I'd suggest Size L."
+State clearly: "Still Size M" or "Now I'd suggest Size L."
 
 ## What Changed
-Explain how their preferences affect the recommendation. Be specific about which preference caused what shift.
+Which preferences shifted the recommendation and why. Reference specific finished measurements.
 
 ## Updated Fit
-- **Bust**: [updated assessment]
-- **Waist**: [updated assessment]
-- **Hip**: [updated assessment]
+- **Bust**: [updated]
+- **Waist**: [updated]
+- **Hip**: [updated]
 
 ## Adjustments
-Any new length/width adjustments based on their preferences.
+Any new adjustments based on preferences.
 
 Rules:
 - Be concise — they already got the full analysis
-- Only mention what changed, don't repeat everything
-- If nothing changes, say so confidently
+- Only mention what changed
+- If nothing changes, say so confidently with reasoning
 - Never use jargon`;
 
 // ─── Prompt Builder ───
@@ -250,27 +267,91 @@ Rules:
 function buildPrompt(
 	bust: number, waist: number, hip: number, height: number | undefined,
 	match: any, chart: any, patternName: string, source: string,
-	profile: any, preferences?: any
+	profile: any, patternContext: Record<string, string[]>,
+	preferences?: any, previousRecommendation?: string
 ): string {
+	// Check if body chart has data
+	const hasBodyData = chart.body.some((r: any) => r.bust_cm !== null);
+
 	let prompt = `CUSTOMER: bust ${bust}cm, waist ${waist}cm, hip ${hip}cm${height ? `, height ${height}cm` : ''} (${source || 'tape measure'})
 
 PATTERN: ${patternName}
 DETERMINISTIC MATCH: ${match.recommended.size} (score ${match.recommended.score.toFixed(1)})
-Between sizes: ${match.betweenSizes ? `yes (${match.lowerSize}/${match.upperSize})` : 'no'}
+Between sizes: ${match.betweenSizes ? `yes (${match.lowerSize}/${match.upperSize})` : 'no'}`;
 
-BODY SIZE CHART:
-${chart.body.map((r: any) => `  ${r.size}: bust=${r.bust_cm} waist=${r.waist_cm} hip=${r.hip_cm}`).join('\n')}
+	// Body chart (if available)
+	if (hasBodyData) {
+		prompt += `\n\nBODY SIZE CHART:
+${chart.body.map((r: any) => `  ${r.size}: bust=${r.bust_cm} waist=${r.waist_cm} hip=${r.hip_cm}`).join('\n')}`;
+	} else {
+		prompt += `\n\nNOTE: This pattern has NO body size chart — only finished garment measurements. The customer's measurements must be compared directly to the finished garment (which INCLUDES ease).`;
+	}
 
-FINISHED GARMENT:
-${chart.finished.map((r: any) => `  ${r.size}: bust=${r.bust_cm} waist=${r.waist_cm} hip=${r.hip_cm} length=${r.full_length_cm}`).join('\n')}
+	// Finished chart (always available)
+	prompt += `\n\nFINISHED GARMENT MEASUREMENTS:
+${chart.finished.map((r: any) => {
+		const parts = [`${r.size}: bust=${r.bust_cm} waist=${r.waist_cm} hip=${r.hip_cm}`];
+		if (r.full_length_cm) parts.push(`length=${r.full_length_cm}`);
+		if (r.sleeve_length_cm) parts.push(`sleeve=${r.sleeve_length_cm}`);
+		if (r.bottom_sweep_cm) parts.push(`sweep=${r.bottom_sweep_cm}`);
+		if (r.shoulder_cm) parts.push(`shoulder=${r.shoulder_cm}`);
+		return '  ' + parts.join(' ');
+	}).join('\n')}`;
 
-${match.recommended.ease.bust_cm !== null ? `EASE AT ${match.recommended.size}: bust=${match.recommended.ease.bust_cm?.toFixed(0)}cm waist=${match.recommended.ease.waist_cm?.toFixed(0)}cm hip=${match.recommended.ease.hip_cm?.toFixed(0)}cm` : ''}`;
+	// Ease
+	if (match.recommended.ease.bust_cm !== null) {
+		prompt += `\n\nEASE AT ${match.recommended.size}: bust=${match.recommended.ease.bust_cm?.toFixed(0)}cm waist=${match.recommended.ease.waist_cm?.toFixed(0)}cm hip=${match.recommended.ease.hip_cm?.toFixed(0)}cm`;
+	}
 
+	// MLP body profile
 	if (profile) {
-		prompt += `\n\nBODY PROFILE (MLP predicted from 59K subjects):
+		prompt += `\n\nPREDICTED BODY PROFILE (from 59K subjects):
 Shoulder: ${profile.shoulder_cm}cm, Arm length: ${profile.arm_length_cm}cm, Leg length: ${profile.leg_length_cm}cm${profile.weight_kg ? `, Est. weight: ${profile.weight_kg}kg` : ''}`;
 	}
 
+	// ── FULL PATTERN CONTEXT ──
+
+	// Product identity
+	if (patternContext['product_identity']?.length > 0) {
+		prompt += `\n\nGARMENT DESCRIPTION:\n${patternContext['product_identity'].join('\n')}`;
+	}
+
+	// Instructions — extract fabric suggestions + construction details (first chunk, trimmed)
+	if (patternContext['instructions_text']?.length > 0) {
+		const instructionText = patternContext['instructions_text'].join('\n');
+		// Extract fabric suggestions section
+		const fabricMatch = instructionText.match(/FABRIC SUGGESTIONS[\s\S]*?(?=MORE IDEAL|DIFFICULTY|SEAM ALLOWANCE|SEWING INSTRUCTIONS|$)/i);
+		const moreMatch = instructionText.match(/MORE IDEAL FABRIC[\s\S]*?(?=DIFFICULTY|SEAM ALLOWANCE|SEWING INSTRUCTIONS|ORGANIZE|$)/i);
+		const diffMatch = instructionText.match(/DIFFICULTY LEVEL[\s\S]*?(?=SEAM|FABRIC|$)/i);
+
+		let construction = '';
+		if (diffMatch) construction += diffMatch[0].trim() + '\n';
+		if (fabricMatch) construction += fabricMatch[0].trim().substring(0, 500) + '\n';
+		if (moreMatch) construction += moreMatch[0].trim().substring(0, 300) + '\n';
+
+		if (construction) {
+			prompt += `\n\nPATTERN CONSTRUCTION & FABRIC:\n${construction.trim()}`;
+		}
+	}
+
+	// DXF piece dimensions
+	if (patternContext['dxf_pattern_piece']?.length > 0) {
+		prompt += `\n\nPATTERN PIECES (DXF):\n${patternContext['dxf_pattern_piece'].join('\n')}`;
+	}
+
+	// Extended size chart (has shoulder, sweep, zipper, slit data)
+	if (patternContext['size_chart_text']?.length > 0) {
+		const chartText = patternContext['size_chart_text'].join('\n');
+		// Only include extra measurements not in the structured chart
+		const extraLines = chartText.split('\n').filter(l =>
+			/shoulder|sweep|zipper|slit|sleeve/i.test(l) && /\d/.test(l)
+		);
+		if (extraLines.length > 0) {
+			prompt += `\n\nADDITIONAL GARMENT MEASUREMENTS:\n${extraLines.join('\n')}`;
+		}
+	}
+
+	// ── PREFERENCES (follow-up) ──
 	if (preferences) {
 		prompt += `\n\nCUSTOMER FIT PREFERENCES:`;
 		if (preferences.fit_preference) prompt += `\n- Overall fit: ${preferences.fit_preference}`;
@@ -280,7 +361,12 @@ Shoulder: ${profile.shoulder_cm}cm, Arm length: ${profile.arm_length_cm}cm, Leg 
 		if (preferences.length_preference) prompt += `\n- Length: prefers ${preferences.length_preference}`;
 		if (preferences.fabric_stretch) prompt += `\n- Fabric: ${preferences.fabric_stretch}`;
 		if (preferences.notes) prompt += `\n- Additional: ${preferences.notes}`;
-		prompt += `\n\nRe-analyze based on these preferences. The initial recommendation was ${match.recommended.size}.`;
+
+		if (previousRecommendation) {
+			prompt += `\n\nPREVIOUS AI RECOMMENDATION:\n${previousRecommendation}`;
+		}
+
+		prompt += `\n\nRe-analyze based on these preferences. Consider whether the size should change.`;
 	} else {
 		prompt += `\n\nGive your recommendation as a warm, personal narrative using the required markdown headers.`;
 	}
