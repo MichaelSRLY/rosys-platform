@@ -55,19 +55,28 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					`SELECT pattern_name FROM cs_pattern_catalog WHERE pattern_slug = $1`, [pattern_slug]
 				);
 
-				// Product identity, instructions, DXF pieces, size chart text — everything
+				// Product identity, instructions, DXF pieces, size chart text, finished images
 				const embeddings = await query<{ chunk_type: string; description: string; metadata: string }>(
 					`SELECT chunk_type, description, metadata::text FROM cs_pattern_embeddings
 					 WHERE pattern_slug = $1
-					 AND chunk_type IN ('product_identity', 'instructions_text', 'dxf_pattern_piece', 'size_chart_text')
+					 AND chunk_type IN ('product_identity', 'instructions_text', 'dxf_pattern_piece', 'size_chart_text', 'finished_image')
 					 ORDER BY chunk_type, chunk_index`,
 					[pattern_slug]
 				);
 
 				const patternContext: Record<string, string[]> = {};
+				const imageUrls: string[] = [];
 				for (const e of embeddings) {
 					if (!patternContext[e.chunk_type]) patternContext[e.chunk_type] = [];
 					patternContext[e.chunk_type].push(e.description);
+
+					// Extract image URLs from finished_image metadata
+					if (e.chunk_type === 'finished_image' && e.metadata) {
+						try {
+							const meta = JSON.parse(e.metadata);
+							if (meta.image_url) imageUrls.push(meta.image_url);
+						} catch {}
+					}
 				}
 
 				// Check DXF availability
@@ -130,6 +139,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					? FOLLOWUP_SYSTEM_PROMPT
 					: INITIAL_SYSTEM_PROMPT;
 
+				// Build message content — text + finished garment images (vision)
+				const messageContent: any[] = [{ type: 'text', text: prompt }];
+
+				// Add up to 2 finished garment images so the AI can SEE the dress
+				for (const url of imageUrls.slice(0, 2)) {
+					messageContent.push({
+						type: 'image',
+						source: { type: 'url', url },
+					});
+				}
+
 				const res = await fetch('https://api.anthropic.com/v1/messages', {
 					method: 'POST',
 					headers: {
@@ -142,7 +162,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						max_tokens: 1500,
 						stream: true,
 						system: systemPrompt,
-						messages: [{ role: 'user', content: prompt }],
+						messages: [{ role: 'user', content: messageContent }],
 					}),
 				});
 
