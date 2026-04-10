@@ -1,5 +1,4 @@
 <script context="module" lang="ts">
-	/** Convert streamed markdown to HTML */
 	function renderMarkdown(text: string): string {
 		return text
 			.replace(/^## (.+)$/gm, '<h2>$1</h2>')
@@ -14,7 +13,6 @@
 
 <script lang="ts">
 	import { ArrowLeft, Ruler, Sparkles, Loader2, Check, Download, Camera, ChevronDown, Zap, RotateCcw, RefreshCw, Scissors, MessageCircle } from 'lucide-svelte';
-	import BodySilhouette from '$lib/components/sizing/BodySilhouette.svelte';
 
 	let { data } = $props();
 	const { pattern, chart, rawSizeChart, savedProfile } = data;
@@ -22,8 +20,6 @@
 	const sizes = chart?.sizes ?? [];
 	const bodyRows = chart?.body ?? [];
 	const hasChart = sizes.length > 0;
-
-	// ─── State ───
 
 	type Phase = 'entry' | 'measurements' | 'photo' | 'body-profile' | 'analyzing' | 'results';
 
@@ -34,7 +30,6 @@
 	let height = $state(savedProfile?.height_cm?.toString() ?? '');
 	let errorMsg = $state('');
 
-	// Streaming / AI state
 	let deterministicResult = $state<any>(null);
 	let streamedText = $state('');
 	let isStreaming = $state(false);
@@ -42,7 +37,6 @@
 	let chartData = $state<any>(null);
 	let hasDxf = $state(false);
 
-	// Follow-up preferences (optional)
 	let showPreferences = $state(false);
 	let fitPreference = $state('');
 	let bustPref = $state('');
@@ -53,25 +47,23 @@
 	let isRefining = $state(false);
 	let refinedText = $state('');
 
-	// UI toggles
 	let showChart = $state(false);
 	let showProfile = $state(false);
 	let showFinished = $state(false);
 	let sizeLocked = $state(false);
 
-	// Custom-fit state
 	let showCustomFit = $state(false);
 	let customFitLoading = $state(false);
 	let customFitGrading = $state<any>(null);
 	let customFitError = $state('');
 
-	// Derived
+	// Analysis step tracking
+	let analysisStep = $state(0);
+
 	const canSubmit = $derived(!!(bust && waist && hip));
 
-	// Extract the AI-recommended size from streamed text — overrides deterministic when AI disagrees
 	function extractSizeFromText(text: string): string | null {
 		if (!text) return null;
-		// Match "Size S", "Size XL", "suggest Size M", "recommend Size L", "I'd suggest Size S"
 		const m = text.match(/Size\s+([A-Z0-9]{1,4})\b/i);
 		return m ? m[1].toUpperCase() : null;
 	}
@@ -79,8 +71,6 @@
 	const recommendedSize = $derived(aiSize ?? deterministicResult?.recommended_size ?? null);
 	const highlightedIndex = $derived(recommendedSize ? (chartData?.sizes ?? sizes).indexOf(recommendedSize) : -1);
 	const hasPreferences = $derived(!!(fitPreference || bustPref || waistPref || hipPref || lengthPref || fabricStretch));
-
-	// ─── SSE Parser ───
 
 	async function consumeStream(res: Response) {
 		const reader = res.body!.getReader();
@@ -93,7 +83,6 @@
 
 			buffer += decoder.decode(value, { stream: true });
 
-			// SSE format: event: <type>\ndata: <json>\n\n
 			while (buffer.includes('\n\n')) {
 				const blockEnd = buffer.indexOf('\n\n');
 				const block = buffer.slice(0, blockEnd);
@@ -117,7 +106,9 @@
 						profile = payload.profile;
 						chartData = payload.chart;
 						hasDxf = payload.has_dxf ?? false;
+						analysisStep = 2;
 					} else if (eventType === 'chunk') {
+						if (analysisStep < 3) analysisStep = 3;
 						if (isRefining) {
 							refinedText += payload;
 						} else {
@@ -133,19 +124,16 @@
 		}
 	}
 
-	// ─── Actions ───
-
-	function startBodyProfile() {
-		phase = 'body-profile';
-		setTimeout(() => startStreaming(), 3000);
-	}
-
-	async function startStreaming() {
+	function startAnalysis() {
+		analysisStep = 1;
 		phase = 'analyzing';
 		isStreaming = true;
 		streamedText = '';
 		errorMsg = '';
+		startStreaming();
+	}
 
+	async function startStreaming() {
 		try {
 			const res = await fetch('/api/ai/size-intelligence/stream', {
 				method: 'POST',
@@ -261,10 +249,10 @@
 		sizeLocked = false;
 		showCustomFit = false;
 		customFitGrading = null;
+		analysisStep = 0;
 		fitPreference = bustPref = waistPref = hipPref = lengthPref = fabricStretch = '';
 	}
 
-	// Auto-fill if saved measurements
 	$effect(() => {
 		if (savedProfile && bust && waist && hip) phase = 'measurements';
 	});
@@ -274,495 +262,444 @@
 	<title>Find Your Size — {pattern.pattern_name}</title>
 </svelte:head>
 
-<div class="px-5 py-8 md:px-8 md:py-12 max-w-lg mx-auto">
+<div class="sz-page">
 
-	<!-- Back link -->
-	<a href="/patterns/{pattern.pattern_slug}"
-		class="inline-flex items-center gap-1.5 text-rosys-fg-faint hover:text-rosys-600 text-[13px] font-medium mb-10 transition-colors">
+	<a href="/patterns/{pattern.pattern_slug}" class="sz-back">
 		<ArrowLeft class="w-4 h-4" strokeWidth={1.5} />
 		{pattern.pattern_name}
 	</a>
 
-	<!-- ═══ ENTRY: Two paths ═══ -->
+	<!-- ═══ ENTRY ═══ -->
 	{#if phase === 'entry'}
-		<div class="page-enter">
-			<div class="text-center mb-10">
-				<div class="w-14 h-14 rounded-[18px] bg-gradient-to-br from-rosys-500 to-rosys-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-rosys-500/20">
-					<Sparkles class="w-6 h-6 text-white" strokeWidth={1.5} />
+		<div class="sz-enter">
+			<div class="sz-hero">
+				<div class="sz-hero-badge">
+					<Sparkles class="w-7 h-7" strokeWidth={1.5} />
 				</div>
-				<h1 class="text-rosys-fg text-[28px] font-bold tracking-[-0.04em] mb-2">Find Your Perfect Size</h1>
-				<p class="text-rosys-fg-muted text-[15px] leading-relaxed max-w-xs mx-auto">{pattern.pattern_name}</p>
+				<h1 class="sz-hero-title">Find Your<br />Perfect Size</h1>
+				<p class="sz-hero-sub">{pattern.pattern_name}</p>
 			</div>
 
-			<div class="space-y-3">
-				<button type="button" onclick={() => phase = 'measurements'}
-					class="w-full text-left p-5 rounded-2xl border border-rosys-border/40 bg-white hover:bg-rosys-50/30 hover:border-rosys-300 transition-all active:scale-[0.98]">
-					<div class="flex items-start gap-4">
-						<div class="w-12 h-12 rounded-xl bg-gradient-to-br from-rosys-500 to-rosys-600 flex items-center justify-center shrink-0 shadow-md shadow-rosys-500/20">
-							<Ruler class="w-6 h-6 text-white" strokeWidth={1.5} />
-						</div>
-						<div>
-							<p class="font-semibold text-rosys-fg text-[17px]">Measure yourself</p>
-							<p class="text-rosys-fg-muted text-[13px] mt-1 leading-relaxed">Enter bust, waist, hip, and height</p>
-							<span class="inline-block mt-2.5 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">Most accurate</span>
-						</div>
+			<div class="sz-paths">
+				<button type="button" onclick={() => phase = 'measurements'} class="sz-path-card sz-path-primary">
+					<div class="sz-path-icon"><Ruler class="w-5 h-5" strokeWidth={1.5} /></div>
+					<div class="sz-path-content">
+						<span class="sz-path-title">Measure yourself</span>
+						<span class="sz-path-desc">Bust, waist, hip & height</span>
 					</div>
+					<span class="sz-badge-green">Accurate</span>
 				</button>
 
-				<button type="button" onclick={() => phase = 'photo'}
-					class="w-full text-left p-5 rounded-2xl border border-rosys-border/30 bg-white/60 hover:bg-white transition-all active:scale-[0.98] opacity-80">
-					<div class="flex items-start gap-4">
-						<div class="w-12 h-12 rounded-xl bg-gradient-to-br from-gray-400 to-gray-500 flex items-center justify-center shrink-0">
-							<Camera class="w-6 h-6 text-white" strokeWidth={1.5} />
-						</div>
-						<div>
-							<p class="font-semibold text-rosys-fg text-[17px]">Upload a photo</p>
-							<p class="text-rosys-fg-faint text-[13px] mt-1 leading-relaxed">AI estimates from a full-body photo</p>
-							<span class="inline-block mt-2.5 text-[11px] font-semibold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">Beta — less accurate</span>
-						</div>
+				<button type="button" onclick={() => phase = 'photo'} class="sz-path-card sz-path-secondary">
+					<div class="sz-path-icon sz-path-icon-muted"><Camera class="w-5 h-5" strokeWidth={1.5} /></div>
+					<div class="sz-path-content">
+						<span class="sz-path-title">Upload a photo</span>
+						<span class="sz-path-desc">AI body estimation</span>
 					</div>
+					<span class="sz-badge-amber">Beta</span>
 				</button>
 			</div>
 		</div>
 
-	<!-- ═══ PHOTO (beta placeholder) ═══ -->
+	<!-- ═══ PHOTO ═══ -->
 	{:else if phase === 'photo'}
-		<div class="page-enter text-center">
-			<h1 class="text-rosys-fg text-[24px] font-bold tracking-[-0.03em] mb-2">Photo Upload</h1>
-			<span class="inline-block text-[11px] font-semibold text-amber-600 bg-amber-50 px-3 py-1 rounded-full mb-4">Beta</span>
-			<p class="text-rosys-fg-muted text-[14px] leading-relaxed max-w-xs mx-auto mb-6">
-				Try our <a href="/profile/measurements/photo" class="text-rosys-500 underline hover:text-rosys-600">photo measurement tool</a>, then come back here with your saved measurements.
+		<div class="sz-enter">
+			<h1 class="sz-section-title">Photo Measurement</h1>
+			<p class="sz-section-desc mb-6">
+				Use our <a href="/profile/measurements/photo" class="text-rosys-500 underline">photo tool</a> to estimate measurements, then return here.
 			</p>
-			<div class="border-2 border-dashed border-rosys-border/40 rounded-2xl p-14 mb-6">
-				<Camera class="w-12 h-12 text-rosys-fg-faint/30 mx-auto mb-3" strokeWidth={1} />
-				<p class="text-rosys-fg-faint text-[13px]">MediaPipe body estimation available in profile</p>
-			</div>
-			<button type="button" onclick={() => phase = 'measurements'}
-				class="w-full py-3.5 rounded-xl bg-rosys-50 text-rosys-600 font-semibold text-[14px] hover:bg-rosys-100 transition-colors">
-				Use tape measure instead
-			</button>
+			<button type="button" onclick={() => phase = 'measurements'} class="sz-btn-outline w-full">Use tape measure instead</button>
 		</div>
 
 	<!-- ═══ MEASUREMENTS ═══ -->
 	{:else if phase === 'measurements'}
-		<div class="page-enter">
-			<div class="text-center mb-8">
-				<div class="w-14 h-14 rounded-[18px] bg-gradient-to-br from-rosys-500 to-rosys-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-rosys-500/20">
-					<Ruler class="w-6 h-6 text-white" strokeWidth={1.5} />
+		<div class="sz-enter">
+			<div class="sz-section-header">
+				<div class="sz-section-icon"><Ruler class="w-5 h-5" strokeWidth={1.5} /></div>
+				<div>
+					<h1 class="sz-section-title">Your Measurements</h1>
+					<p class="sz-section-desc">Soft tape — snug but not tight</p>
 				</div>
-				<h1 class="text-rosys-fg text-[28px] font-bold tracking-[-0.04em] mb-2">Your Measurements</h1>
-				<p class="text-rosys-fg-muted text-[14px]">Soft tape — snug but not tight</p>
 			</div>
 
-			<div class="space-y-4 mb-8">
+			<div class="sz-form">
 				{#each [
-					{ id: 'bust', label: 'Bust', ph: 'e.g. 88', get: () => bust, set: (v: string) => bust = v },
-					{ id: 'waist', label: 'Waist', ph: 'e.g. 72', get: () => waist, set: (v: string) => waist = v },
-					{ id: 'hip', label: 'Hip', ph: 'e.g. 92', get: () => hip, set: (v: string) => hip = v },
-					{ id: 'height', label: 'Height', ph: 'e.g. 168', get: () => height, set: (v: string) => height = v, opt: true },
+					{ id: 'bust', label: 'Bust', ph: '88', get: () => bust, set: (v: string) => bust = v },
+					{ id: 'waist', label: 'Waist', ph: '72', get: () => waist, set: (v: string) => waist = v },
+					{ id: 'hip', label: 'Hip', ph: '92', get: () => hip, set: (v: string) => hip = v },
+					{ id: 'height', label: 'Height', ph: '168', get: () => height, set: (v: string) => height = v, opt: true },
 				] as f}
-					<div>
-						<label for={f.id} class="block text-[13px] font-medium text-rosys-fg mb-2">
-							{f.label}{#if f.opt}<span class="font-normal text-rosys-fg-faint"> (for length advice)</span>{/if}
+					<div class="sz-field">
+						<label for={f.id} class="sz-label">
+							{f.label}{#if f.opt}<span class="sz-label-opt"> (optional)</span>{/if}
 						</label>
-						<div class="relative">
-							<input id={f.id} type="number" inputmode="numeric" placeholder={f.ph} value={f.get()} oninput={(e) => f.set((e.target as HTMLInputElement).value)}
-								class="w-full px-5 py-4 rounded-2xl bg-white border border-rosys-border/50 text-[17px] text-rosys-fg placeholder-rosys-fg-faint/30 focus:outline-none focus:ring-2 focus:ring-rosys-400/20 focus:border-rosys-400 transition-all shadow-sm" />
-							<span class="absolute right-4 top-1/2 -translate-y-1/2 text-[13px] text-rosys-fg-faint">cm</span>
+						<div class="sz-input-wrap">
+							<input id={f.id} type="number" inputmode="numeric" placeholder={f.ph} value={f.get()} oninput={(e) => f.set((e.target as HTMLInputElement).value)} class="sz-input" />
+							<span class="sz-input-unit">cm</span>
 						</div>
 					</div>
 				{/each}
 			</div>
 
-			{#if errorMsg}<p class="text-rosys-500 text-[13px] text-center mb-4">{errorMsg}</p>{/if}
+			{#if errorMsg}<p class="sz-error">{errorMsg}</p>{/if}
 
-			<button type="button" disabled={!canSubmit} onclick={startBodyProfile}
-				class="w-full py-4 rounded-2xl font-semibold text-[16px] text-white bg-gradient-to-r from-rosys-500 to-rosys-600 hover:from-rosys-600 hover:to-rosys-700 active:scale-[0.98] transition-all shadow-lg shadow-rosys-500/20 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2.5">
+			<button type="button" disabled={!canSubmit} onclick={startAnalysis} class="sz-btn-primary w-full">
 				<Sparkles class="w-5 h-5" strokeWidth={2} />
 				Analyze my fit
 			</button>
 
 			{#if savedProfile}
-				<p class="text-center text-[12px] text-rosys-fg-faint mt-3"><Check class="w-3 h-3 inline text-emerald-500" strokeWidth={2} /> Using your saved measurements</p>
+				<p class="sz-saved-note"><Check class="w-3 h-3 inline text-emerald-500" strokeWidth={2} /> Saved measurements loaded</p>
 			{/if}
 
-			<button type="button" onclick={() => phase = 'entry'} class="w-full mt-4 py-2 text-[13px] text-rosys-fg-faint hover:text-rosys-500 transition-colors">
-				<ArrowLeft class="w-3.5 h-3.5 inline" strokeWidth={1.5} /> Back
+			<button type="button" onclick={() => phase = 'entry'} class="sz-btn-ghost w-full mt-2">
+				<ArrowLeft class="w-3.5 h-3.5" strokeWidth={1.5} /> Back
 			</button>
 		</div>
 
-	<!-- ═══ BODY PROFILE ANIMATION ═══ -->
-	{:else if phase === 'body-profile'}
-		<div class="page-enter">
-			<div class="text-center mb-6">
-				<h1 class="text-rosys-fg text-[22px] font-bold tracking-[-0.03em] mb-1">Your Body Profile</h1>
-				<p class="text-rosys-fg-faint text-[13px]">Mapping your measurements</p>
-			</div>
-			<BodySilhouette bust={parseFloat(bust)||0} waist={parseFloat(waist)||0} hips={parseFloat(hip)||0} height={parseFloat(height)||0} />
-			<div class="flex items-center justify-center gap-2 text-[13px] text-rosys-fg-faint mt-6">
-				<Loader2 class="w-4 h-4 animate-spin text-rosys-400" strokeWidth={2} />
-				<span>Preparing AI analysis...</span>
-			</div>
-		</div>
-
-	<!-- ═══ AI ANALYSIS (streaming) ═══ -->
+	<!-- ═══ ANALYZING ═══ -->
 	{:else if phase === 'analyzing'}
-		<div class="page-enter">
-			{#if recommendedSize}
-				<div class="text-center mb-6">
-					<div class="inline-block px-10 py-5 rounded-[20px] bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-xl shadow-emerald-500/25 page-enter">
-						<div class="text-white/70 text-[11px] uppercase tracking-[0.15em] font-medium mb-1">{deterministicResult?.pattern_name}</div>
-						<div class="text-white text-[46px] font-bold tracking-tight leading-none">{recommendedSize}</div>
-					</div>
-				</div>
-			{/if}
-
-			<h1 class="text-center text-rosys-fg text-[20px] font-bold tracking-[-0.03em] mb-5">Analyzing your fit...</h1>
-
-			<div class="bg-white rounded-2xl border border-rosys-border/30 shadow-sm p-5 mb-6 max-h-[55vh] overflow-y-auto">
-				{#if streamedText}
-					<div class="sizing-prose">{@html renderMarkdown(streamedText)}</div>
-				{:else}
-					<div class="flex items-center gap-3 text-rosys-fg-faint py-4">
-						<Loader2 class="w-5 h-5 animate-spin text-rosys-400" strokeWidth={2} />
-						<span>Thinking about your measurements...</span>
-					</div>
-				{/if}
-				{#if isStreaming}<span class="inline-block w-1.5 h-4 bg-rosys-400 rounded-sm ml-0.5 animate-pulse"></span>{/if}
-			</div>
-
-			{#if errorMsg}<div class="bg-red-50 border border-red-100 rounded-xl p-4 text-red-600 text-[13px] mb-4">{errorMsg}</div>{/if}
-		</div>
-
-	<!-- ═══ RESULTS (full recommendation) ═══ -->
-	{:else if phase === 'results'}
-		<div class="page-enter">
-
-			<!-- ── Size badge ── -->
-			{#if recommendedSize}
-				<div class="text-center mb-5">
-					<div class="inline-block px-10 py-5 rounded-[20px] bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-xl shadow-emerald-500/25">
-						<div class="text-white/70 text-[11px] uppercase tracking-[0.15em] font-medium mb-1">{deterministicResult?.pattern_name}</div>
-						<div class="text-white text-[46px] font-bold tracking-tight leading-none">{recommendedSize}</div>
-					</div>
-				</div>
-
-				<div class="flex justify-center gap-1.5 mb-6">
-					{#each (chartData?.sizes ?? sizes).length > 0 ? (chartData?.sizes ?? sizes) : ['XXS','XS','S','M','L','XL','XXL'] as s, i}
-						<div class="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-semibold transition-all
-							{s === recommendedSize ? 'bg-emerald-500 text-white shadow-md scale-110' : 'bg-warm-100 text-rosys-fg-faint border border-rosys-border/30'}">{s}</div>
+		<div class="sz-enter">
+			<!-- Analysis progress -->
+			<div class="sz-analysis-container">
+				<!-- Steps indicator -->
+				<div class="sz-steps">
+					{#each [
+						{ label: 'Matching sizes', done: analysisStep >= 2 },
+						{ label: 'Body profile', done: analysisStep >= 2 },
+						{ label: 'AI analysis', done: !isStreaming && analysisStep >= 3 },
+					] as step, i}
+						<div class="sz-step" class:sz-step-done={step.done} class:sz-step-active={!step.done && analysisStep >= i + 1}>
+							<div class="sz-step-dot">
+								{#if step.done}
+									<Check class="w-3 h-3" strokeWidth={3} />
+								{:else if !step.done && analysisStep >= i + 1}
+									<Loader2 class="w-3 h-3 animate-spin" strokeWidth={2.5} />
+								{/if}
+							</div>
+							<span class="sz-step-label">{step.label}</span>
+						</div>
 					{/each}
 				</div>
-			{/if}
 
-			<!-- ── Between sizes ── -->
-			{#if deterministicResult?.between_sizes}
-				<div class="flex items-start gap-3 p-4 rounded-2xl bg-amber-50/60 border border-amber-200/30 mb-5">
-					<span class="text-[20px] leading-none mt-0.5">↕</span>
-					<p class="text-[13px] text-amber-800">Between <strong>{deterministicResult.lower_size}</strong> and <strong>{deterministicResult.upper_size}</strong></p>
+				<!-- Size badge (appears with deterministic result) -->
+				{#if recommendedSize}
+					<div class="sz-size-reveal">
+						<div class="sz-size-badge">
+							<span class="sz-size-pattern">{deterministicResult?.pattern_name}</span>
+							<span class="sz-size-value">{recommendedSize}</span>
+						</div>
+					</div>
+				{/if}
+
+				<!-- Streaming AI text -->
+				<div class="sz-stream-container">
+					{#if streamedText}
+						<div class="sz-prose">{@html renderMarkdown(streamedText)}</div>
+					{:else if !errorMsg}
+						<div class="sz-thinking">
+							<div class="sz-thinking-dots">
+								<span></span><span></span><span></span>
+							</div>
+						</div>
+					{/if}
+					{#if isStreaming}<span class="sz-cursor"></span>{/if}
+				</div>
+
+				{#if errorMsg}<div class="sz-error-card">{errorMsg}</div>{/if}
+			</div>
+		</div>
+
+	<!-- ═══ RESULTS ═══ -->
+	{:else if phase === 'results'}
+		<div class="sz-enter">
+
+			<!-- Size hero -->
+			{#if recommendedSize}
+				<div class="sz-result-hero">
+					<div class="sz-result-badge">
+						<span class="sz-result-pattern">{deterministicResult?.pattern_name}</span>
+						<span class="sz-result-size">{recommendedSize}</span>
+					</div>
+					<div class="sz-size-strip">
+						{#each (chartData?.sizes ?? sizes).length > 0 ? (chartData?.sizes ?? sizes) : ['XXS','XS','S','M','L','XL','XXL'] as s}
+							<span class="sz-size-pip" class:sz-size-pip-active={s === recommendedSize}>{s}</span>
+						{/each}
+					</div>
 				</div>
 			{/if}
 
-			<!-- ── AI Analysis (THE STAR) ── -->
-			<div class="bg-white rounded-2xl border border-rosys-border/30 shadow-sm p-5 mb-5">
-				<div class="sizing-prose">{@html renderMarkdown(refinedText || streamedText)}</div>
+			<!-- Between sizes -->
+			{#if deterministicResult?.between_sizes}
+				<div class="sz-between">
+					<span class="sz-between-icon">↕</span>
+					<span>Between <strong>{deterministicResult.lower_size}</strong> and <strong>{deterministicResult.upper_size}</strong></span>
+				</div>
+			{/if}
+
+			<!-- AI Analysis -->
+			<div class="sz-card sz-card-analysis">
+				<div class="sz-prose">{@html renderMarkdown(refinedText || streamedText)}</div>
 			</div>
 
-			<!-- ── Fit badges ── -->
+			<!-- Fit summary strip -->
 			{#if deterministicResult?.fit}
-				<div class="grid grid-cols-3 gap-2 mb-5">
+				<div class="sz-fit-strip">
 					{#each [
 						{ label: 'Bust', d: deterministicResult.fit.bust },
 						{ label: 'Waist', d: deterministicResult.fit.waist },
 						{ label: 'Hip', d: deterministicResult.fit.hip },
 					] as { label, d }}
 						{#if d}
-							<div class="text-center p-3 rounded-xl bg-white border border-rosys-border/20 shadow-sm">
-								<p class="text-[10px] text-rosys-fg-faint uppercase tracking-wider">{label}</p>
-								<p class="text-[17px] font-bold text-rosys-fg mt-0.5">{d.user_cm}<span class="text-[11px] font-normal text-rosys-fg-faint ml-0.5">cm</span></p>
-								<span class="inline-block mt-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-md capitalize
-									{d.fit === 'exact' ? 'text-emerald-700 bg-emerald-50' : d.fit === 'comfortable' ? 'text-blue-700 bg-blue-50' : d.fit === 'tight' ? 'text-amber-700 bg-amber-50' : 'text-violet-700 bg-violet-50'}">{d.fit}</span>
+							<div class="sz-fit-item">
+								<span class="sz-fit-label">{label}</span>
+								<span class="sz-fit-value">{d.user_cm}</span>
+								<span class="sz-fit-tag sz-fit-{d.fit}">{d.fit}</span>
 							</div>
 						{/if}
 					{/each}
 				</div>
 			{/if}
 
-			<!-- ── Finished measurements (the data) ── -->
-			{#if chartData?.finished?.length > 0}
-				<button type="button" onclick={() => showFinished = !showFinished}
-					class="w-full flex items-center justify-between p-4 rounded-2xl bg-white border border-rosys-border/30 shadow-sm hover:shadow-md transition-all mb-4">
-					<div class="flex items-center gap-3">
-						<div class="w-8 h-8 rounded-xl bg-gradient-to-br from-rosys-500 to-rosys-600 flex items-center justify-center">
-							<Ruler class="w-4 h-4 text-white" strokeWidth={2} />
-						</div>
-						<div class="text-left">
-							<p class="text-[13px] font-semibold text-rosys-fg">Finished Garment Measurements</p>
-							<p class="text-[11px] text-rosys-fg-faint">How the actual dress will measure when sewn</p>
-						</div>
-					</div>
-					<ChevronDown class="w-4 h-4 text-rosys-fg-faint transition-transform {showFinished ? 'rotate-180' : ''}" strokeWidth={1.5} />
-				</button>
-
-				{#if showFinished}
-					<div class="bg-white rounded-2xl border border-rosys-border/20 shadow-sm p-4 mb-5 page-enter overflow-x-auto">
-						<table class="w-full text-[12px]">
-							<thead>
-								<tr class="border-b border-rosys-border/30">
-									<th class="text-left py-1.5 pr-2 text-rosys-fg-faint font-medium"></th>
-									{#each chartData.sizes as s, i}
-										<th class="text-center py-1.5 px-1 font-semibold {i === highlightedIndex ? 'text-emerald-600' : 'text-rosys-fg'}">{s}</th>
-									{/each}
-								</tr>
-							</thead>
-							<tbody>
-								{#each [
-									{ key: 'bust_cm', label: 'Bust' },
-									{ key: 'waist_cm', label: 'Waist' },
-									{ key: 'hip_cm', label: 'Hip' },
-									{ key: 'full_length_cm', label: 'Length' },
-									{ key: 'sleeve_length_cm', label: 'Sleeve' },
-								] as col}
-									{@const hasData = chartData.finished.some((r: any) => r[col.key])}
-									{#if hasData}
-										<tr class="border-b border-rosys-border/10">
-											<td class="py-1.5 pr-2 text-rosys-fg-muted">{col.label}</td>
-											{#each chartData.finished as row, i}
-												<td class="text-center py-1.5 px-1 {i === highlightedIndex ? 'font-semibold text-emerald-600 bg-emerald-50/30' : 'text-rosys-fg'}">{row[col.key] ? Number(row[col.key]) : '—'}</td>
-											{/each}
-										</tr>
-									{/if}
-								{/each}
-							</tbody>
-						</table>
-						<p class="text-[10px] text-rosys-fg-faint mt-2">Finished = actual garment dimensions (body + ease)</p>
-					</div>
-				{/if}
-			{/if}
-
-			<!-- ── Body profile (MLP) ── -->
-			{#if profile}
-				<button type="button" onclick={() => showProfile = !showProfile}
-					class="w-full flex items-center justify-between p-4 rounded-2xl bg-white border border-rosys-border/30 shadow-sm hover:shadow-md transition-all mb-4">
-					<div class="flex items-center gap-3">
-						<div class="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center">
-							<Zap class="w-4 h-4 text-white" strokeWidth={2} />
-						</div>
-						<div class="text-left">
-							<p class="text-[13px] font-semibold text-rosys-fg">Your Body Profile</p>
-							<p class="text-[11px] text-rosys-fg-faint">Predicted from 59,000 body records</p>
-						</div>
-					</div>
-					<ChevronDown class="w-4 h-4 text-rosys-fg-faint transition-transform {showProfile ? 'rotate-180' : ''}" strokeWidth={1.5} />
-				</button>
-				{#if showProfile}
-					<div class="bg-white rounded-2xl border border-rosys-border/20 shadow-sm p-5 mb-5 page-enter">
-						<div class="grid grid-cols-3 gap-3">
-							{#each [
-								{ label: 'Shoulder', value: profile.shoulder_cm, icon: '↔' },
-								{ label: 'Arm Length', value: profile.arm_length_cm, icon: '📏' },
-								{ label: 'Arm Circ.', value: profile.arm_circ_cm, icon: '💪' },
-								{ label: 'Leg Length', value: profile.leg_length_cm, icon: '🦵' },
-								{ label: 'Weight', value: profile.weight_kg, icon: '⚖️', unit: 'kg' },
-								{ label: 'Neck', value: profile.neck_cm, icon: '👔' },
-							] as m}
-								{#if m.value}
-									<div class="text-center p-3 rounded-xl bg-gradient-to-b from-warm-50 to-white border border-rosys-border/20">
-										<span class="text-[16px]">{m.icon}</span>
-										<p class="text-[18px] font-bold text-rosys-fg mt-1">{m.value}</p>
-										<p class="text-[10px] text-rosys-fg-faint">{m.unit || 'cm'} · {m.label}</p>
-									</div>
-								{/if}
-							{/each}
-						</div>
-					</div>
-				{/if}
-			{/if}
-
-			<!-- ═══ OPTIONAL: Fit Preferences (follow-up) ═══ -->
-			{#if !sizeLocked}
-				<button type="button" onclick={() => showPreferences = !showPreferences}
-					class="w-full flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-rosys-50/80 to-white border border-rosys-200/40 shadow-sm hover:shadow-md transition-all mb-5">
-					<div class="flex items-center gap-3">
-						<div class="w-8 h-8 rounded-xl bg-gradient-to-br from-rosys-400 to-rosys-500 flex items-center justify-center">
-							<MessageCircle class="w-4 h-4 text-white" strokeWidth={2} />
-						</div>
-						<div class="text-left">
-							<p class="text-[13px] font-semibold text-rosys-fg">Want to fine-tune?</p>
-							<p class="text-[11px] text-rosys-fg-faint">Tell us how you like your fit — optional</p>
-						</div>
-					</div>
-					<ChevronDown class="w-4 h-4 text-rosys-fg-faint transition-transform {showPreferences ? 'rotate-180' : ''}" strokeWidth={1.5} />
-				</button>
-
-				{#if showPreferences}
-					<div class="bg-white rounded-2xl border border-rosys-border/20 shadow-sm p-5 mb-5 page-enter space-y-4">
-						<p class="text-[11px] font-semibold text-rosys-fg-faint uppercase tracking-[0.1em]">How do you like your fit?</p>
-
-						<!-- Overall fit -->
-						<div>
-							<p class="text-[12px] font-medium text-rosys-fg mb-2">Overall preference</p>
-							<div class="flex gap-2">
-								{#each ['Fitted & close', 'Comfortable ease', 'Loose & relaxed'] as opt}
-									<button type="button" onclick={() => fitPreference = fitPreference === opt ? '' : opt}
-										class="flex-1 py-2.5 rounded-xl text-[12px] font-medium transition-all border
-										{fitPreference === opt ? 'bg-rosys-500 text-white border-rosys-500 shadow-sm' : 'bg-warm-50 text-rosys-fg-muted border-rosys-border/40 hover:border-rosys-300'}">{opt}</button>
-								{/each}
+			<!-- Expandable sections -->
+			<div class="sz-expandables">
+				<!-- Finished measurements -->
+				{#if chartData?.finished?.length > 0}
+					<button type="button" onclick={() => showFinished = !showFinished} class="sz-expand-trigger">
+						<Ruler class="w-4 h-4 text-rosys-400" strokeWidth={1.5} />
+						<span>Finished garment measurements</span>
+						<ChevronDown class="w-3.5 h-3.5 text-rosys-fg-faint transition-transform {showFinished ? 'rotate-180' : ''}" strokeWidth={1.5} />
+					</button>
+					{#if showFinished}
+						<div class="sz-expand-content page-enter">
+							<div class="overflow-x-auto">
+								<table class="sz-table">
+									<thead><tr>
+										<th></th>
+										{#each chartData.sizes as s, i}<th class:sz-th-active={i === highlightedIndex}>{s}</th>{/each}
+									</tr></thead>
+									<tbody>
+										{#each [
+											{ key: 'bust_cm', label: 'Bust' }, { key: 'waist_cm', label: 'Waist' },
+											{ key: 'hip_cm', label: 'Hip' }, { key: 'full_length_cm', label: 'Length' },
+											{ key: 'sleeve_length_cm', label: 'Sleeve' },
+										] as col}
+											{@const hasData = chartData.finished.some((r: any) => r[col.key])}
+											{#if hasData}
+												<tr>
+													<td class="sz-td-label">{col.label}</td>
+													{#each chartData.finished as row, i}
+														<td class:sz-td-active={i === highlightedIndex}>{row[col.key] ? Number(row[col.key]) : '—'}</td>
+													{/each}
+												</tr>
+											{/if}
+										{/each}
+									</tbody>
+								</table>
 							</div>
-						</div>
-
-						<!-- Per-measurement -->
-						<div>
-							<p class="text-[12px] font-medium text-rosys-fg mb-2">Specific areas</p>
-							<div class="space-y-2">
-								{#each [
-									{ label: 'Bust', get: () => bustPref, set: (v: string) => bustPref = v, opts: ['More room', 'As fitted as possible'] },
-									{ label: 'Waist', get: () => waistPref, set: (v: string) => waistPref = v, opts: ['More room', 'Defined waist'] },
-									{ label: 'Hip', get: () => hipPref, set: (v: string) => hipPref = v, opts: ['More room', 'Slim through hip'] },
-								] as area}
-									<div class="flex items-center gap-2">
-										<span class="text-[11px] text-rosys-fg-muted w-10 shrink-0">{area.label}</span>
-										<div class="flex gap-1.5 flex-1">
-											{#each area.opts as opt}
-												<button type="button" onclick={() => area.set(area.get() === opt ? '' : opt)}
-													class="flex-1 py-2 rounded-lg text-[11px] font-medium transition-all border
-													{area.get() === opt ? 'bg-rosys-100 text-rosys-700 border-rosys-300' : 'bg-warm-50 text-rosys-fg-faint border-rosys-border/30 hover:border-rosys-200'}">{opt}</button>
-											{/each}
-										</div>
-									</div>
-								{/each}
-							</div>
-						</div>
-
-						<!-- Length -->
-						<div>
-							<p class="text-[12px] font-medium text-rosys-fg mb-2">Length preference</p>
-							<div class="flex gap-2">
-								{#each ['Shorter', 'As designed', 'Longer'] as opt}
-									<button type="button" onclick={() => lengthPref = lengthPref === opt ? '' : opt}
-										class="flex-1 py-2.5 rounded-xl text-[12px] font-medium transition-all border
-										{lengthPref === opt ? 'bg-rosys-500 text-white border-rosys-500 shadow-sm' : 'bg-warm-50 text-rosys-fg-muted border-rosys-border/40 hover:border-rosys-300'}">{opt}</button>
-								{/each}
-							</div>
-						</div>
-
-						<!-- Fabric -->
-						<div>
-							<p class="text-[12px] font-medium text-rosys-fg mb-2">Fabric type</p>
-							<div class="flex gap-2">
-								{#each ['Woven (no stretch)', 'Light stretch', 'Stretch knit'] as opt}
-									<button type="button" onclick={() => fabricStretch = fabricStretch === opt ? '' : opt}
-										class="flex-1 py-2.5 rounded-xl text-[12px] font-medium transition-all border
-										{fabricStretch === opt ? 'bg-rosys-500 text-white border-rosys-500 shadow-sm' : 'bg-warm-50 text-rosys-fg-muted border-rosys-border/40 hover:border-rosys-300'}">{opt}</button>
-								{/each}
-							</div>
-						</div>
-
-						<button type="button" disabled={!hasPreferences || isRefining} onclick={refineWithPreferences}
-							class="w-full py-3.5 rounded-2xl font-semibold text-[14px] text-white bg-gradient-to-r from-rosys-500 to-rosys-600 active:scale-[0.98] transition-all shadow-lg shadow-rosys-500/20 disabled:opacity-40 inline-flex items-center justify-center gap-2">
-							{#if isRefining}
-								<Loader2 class="w-4 h-4 animate-spin" strokeWidth={2} />Re-analyzing...
-							{:else}
-								<RefreshCw class="w-4 h-4" strokeWidth={2} />Update my recommendation
-							{/if}
-						</button>
-					</div>
-
-					<!-- Refined result -->
-					{#if refinedText && !isRefining}
-						<div class="bg-rosys-50/50 rounded-2xl border border-rosys-200/40 p-5 mb-5 page-enter">
-							<p class="text-[11px] font-semibold text-rosys-500 uppercase tracking-[0.1em] mb-3">Updated Analysis</p>
-							<div class="sizing-prose">{@html renderMarkdown(refinedText)}</div>
 						</div>
 					{/if}
 				{/if}
 
-				<!-- Lock size button -->
-				<button type="button" onclick={() => { sizeLocked = true; showPreferences = false; }}
-					class="w-full py-4 rounded-2xl font-semibold text-[16px] text-white bg-gradient-to-r from-emerald-500 to-emerald-600 active:scale-[0.98] transition-all shadow-lg shadow-emerald-500/20 inline-flex items-center justify-center gap-2.5 mb-5">
+				<!-- Body profile -->
+				{#if profile}
+					<button type="button" onclick={() => showProfile = !showProfile} class="sz-expand-trigger">
+						<Zap class="w-4 h-4 text-violet-400" strokeWidth={1.5} />
+						<span>Body profile <span class="sz-subtle">· predicted from 59K records</span></span>
+						<ChevronDown class="w-3.5 h-3.5 text-rosys-fg-faint transition-transform {showProfile ? 'rotate-180' : ''}" strokeWidth={1.5} />
+					</button>
+					{#if showProfile}
+						<div class="sz-expand-content page-enter">
+							<div class="sz-profile-grid">
+								{#each [
+									{ label: 'Shoulder', value: profile.shoulder_cm, u: 'cm' },
+									{ label: 'Arm length', value: profile.arm_length_cm, u: 'cm' },
+									{ label: 'Arm circ.', value: profile.arm_circ_cm, u: 'cm' },
+									{ label: 'Leg length', value: profile.leg_length_cm, u: 'cm' },
+									{ label: 'Weight', value: profile.weight_kg, u: 'kg' },
+									{ label: 'Neck', value: profile.neck_cm, u: 'cm' },
+								] as m}
+									{#if m.value}
+										<div class="sz-profile-item">
+											<span class="sz-profile-val">{m.value}<span class="sz-profile-unit">{m.u}</span></span>
+											<span class="sz-profile-label">{m.label}</span>
+										</div>
+									{/if}
+								{/each}
+							</div>
+						</div>
+					{/if}
+				{/if}
+
+				<!-- Size chart reference -->
+				{#if hasChart}
+					<button type="button" onclick={() => showChart = !showChart} class="sz-expand-trigger">
+						<span class="w-4 h-4 text-rosys-fg-faint text-[12px] font-bold">#</span>
+						<span>Body size chart</span>
+						<ChevronDown class="w-3.5 h-3.5 text-rosys-fg-faint transition-transform {showChart ? 'rotate-180' : ''}" strokeWidth={1.5} />
+					</button>
+					{#if showChart}
+						<div class="sz-expand-content page-enter overflow-x-auto">
+							<table class="sz-table">
+								<thead><tr>
+									<th></th>
+									{#each sizes as s, i}<th class:sz-th-active={i === highlightedIndex}>{s}</th>{/each}
+								</tr></thead>
+								<tbody>
+									{#each ['bust_cm','waist_cm','hip_cm'] as key}
+										{@const label = key === 'bust_cm' ? 'Bust' : key === 'waist_cm' ? 'Waist' : 'Hip'}
+										<tr>
+											<td class="sz-td-label">{label}</td>
+											{#each bodyRows as row, i}<td class:sz-td-active={i === highlightedIndex}>{(row as any)[key] ? Number((row as any)[key]) : '—'}</td>{/each}
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					{/if}
+				{/if}
+			</div>
+
+			<!-- Preferences -->
+			{#if !sizeLocked}
+				<button type="button" onclick={() => showPreferences = !showPreferences} class="sz-prefs-trigger">
+					<MessageCircle class="w-4 h-4" strokeWidth={1.5} />
+					<span>Fine-tune your fit</span>
+					<span class="sz-subtle">optional</span>
+					<ChevronDown class="w-3.5 h-3.5 ml-auto transition-transform {showPreferences ? 'rotate-180' : ''}" strokeWidth={1.5} />
+				</button>
+
+				{#if showPreferences}
+					<div class="sz-prefs-panel page-enter">
+						<div class="sz-pref-group">
+							<span class="sz-pref-title">Overall fit</span>
+							<div class="sz-pref-opts">
+								{#each ['Fitted & close', 'Comfortable ease', 'Loose & relaxed'] as opt}
+									<button type="button" onclick={() => fitPreference = fitPreference === opt ? '' : opt}
+										class="sz-pref-btn" class:sz-pref-active={fitPreference === opt}>{opt}</button>
+								{/each}
+							</div>
+						</div>
+
+						<div class="sz-pref-group">
+							<span class="sz-pref-title">By area</span>
+							{#each [
+								{ label: 'Bust', get: () => bustPref, set: (v: string) => bustPref = v, opts: ['More room', 'As fitted as possible'] },
+								{ label: 'Waist', get: () => waistPref, set: (v: string) => waistPref = v, opts: ['More room', 'Defined waist'] },
+								{ label: 'Hip', get: () => hipPref, set: (v: string) => hipPref = v, opts: ['More room', 'Slim through hip'] },
+							] as area}
+								<div class="sz-pref-area">
+									<span class="sz-pref-area-label">{area.label}</span>
+									<div class="sz-pref-opts">
+										{#each area.opts as opt}
+											<button type="button" onclick={() => area.set(area.get() === opt ? '' : opt)}
+												class="sz-pref-btn sz-pref-btn-sm" class:sz-pref-active={area.get() === opt}>{opt}</button>
+										{/each}
+									</div>
+								</div>
+							{/each}
+						</div>
+
+						<div class="sz-pref-group">
+							<span class="sz-pref-title">Length</span>
+							<div class="sz-pref-opts">
+								{#each ['Shorter', 'As designed', 'Longer'] as opt}
+									<button type="button" onclick={() => lengthPref = lengthPref === opt ? '' : opt}
+										class="sz-pref-btn" class:sz-pref-active={lengthPref === opt}>{opt}</button>
+								{/each}
+							</div>
+						</div>
+
+						<div class="sz-pref-group">
+							<span class="sz-pref-title">Fabric</span>
+							<div class="sz-pref-opts">
+								{#each ['Woven (no stretch)', 'Light stretch', 'Stretch knit'] as opt}
+									<button type="button" onclick={() => fabricStretch = fabricStretch === opt ? '' : opt}
+										class="sz-pref-btn" class:sz-pref-active={fabricStretch === opt}>{opt}</button>
+								{/each}
+							</div>
+						</div>
+
+						<button type="button" disabled={!hasPreferences || isRefining} onclick={refineWithPreferences} class="sz-btn-primary w-full">
+							{#if isRefining}
+								<Loader2 class="w-4 h-4 animate-spin" strokeWidth={2} />Re-analyzing...
+							{:else}
+								<RefreshCw class="w-4 h-4" strokeWidth={2} />Update recommendation
+							{/if}
+						</button>
+					</div>
+
+					{#if refinedText && !isRefining}
+						<div class="sz-card sz-card-refined page-enter">
+							<span class="sz-card-label">Updated Analysis</span>
+							<div class="sz-prose">{@html renderMarkdown(refinedText)}</div>
+						</div>
+					{/if}
+				{/if}
+
+				<button type="button" onclick={() => { sizeLocked = true; showPreferences = false; }} class="sz-btn-lock">
 					<Check class="w-5 h-5" strokeWidth={2.5} />
 					Lock in size {recommendedSize}
 				</button>
 			{/if}
 
-			<!-- ═══ LOCKED: Downloads ═══ -->
+			<!-- Downloads -->
 			{#if sizeLocked}
-				<div class="bg-emerald-50/50 rounded-2xl border border-emerald-200/30 p-4 mb-5 flex items-center gap-3">
-					<div class="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
-						<Check class="w-4 h-4 text-white" strokeWidth={2.5} />
-					</div>
+				<div class="sz-locked-banner">
+					<Check class="w-5 h-5 text-emerald-500" strokeWidth={2.5} />
 					<div>
-						<p class="text-[14px] font-semibold text-rosys-fg">Size {recommendedSize} locked</p>
-						<p class="text-[12px] text-rosys-fg-muted">Ready to download your pattern</p>
+						<strong>Size {recommendedSize} locked</strong>
+						<span class="sz-subtle block">Ready to download</span>
 					</div>
 				</div>
 
-				<!-- Standard PDF downloads -->
-				<div class="bg-white rounded-2xl border border-rosys-border/30 shadow-sm p-5 mb-5">
-					<p class="text-[11px] font-semibold text-rosys-fg-faint uppercase tracking-[0.1em] mb-1">Download Your Pattern</p>
-					<p class="text-[13px] text-rosys-fg-muted mb-4">Size <strong>{recommendedSize}</strong> only — clean single-size PDF.</p>
-					<div class="grid grid-cols-3 gap-2">
+				<div class="sz-downloads">
+					<span class="sz-downloads-title">Download Pattern</span>
+					<span class="sz-downloads-sub">Size {recommendedSize} — single-size PDF</span>
+					<div class="sz-download-grid">
 						{#each [
 							{ format: 'a0', label: 'A0', sub: 'Print shop' },
-							{ format: 'a4', label: 'A4', sub: 'Home' },
-							{ format: 'us_letter', label: 'US Letter', sub: 'Home' }
+							{ format: 'a4', label: 'A4', sub: 'Home printer' },
+							{ format: 'us_letter', label: 'US Letter', sub: 'Home printer' }
 						] as dl}
-							<a href="/api/patterns/single-size?slug={pattern.pattern_slug}&size={recommendedSize}&format={dl.format}"
-								class="flex flex-col items-center gap-1 py-3.5 px-2 rounded-xl bg-rosys-50/50 hover:bg-rosys-100/60 border border-rosys-200/40 hover:border-rosys-300 active:scale-[0.96] transition-all group">
-								<Download class="w-4 h-4 text-rosys-400 group-hover:text-rosys-500" strokeWidth={1.5} />
-								<span class="text-[13px] font-semibold text-rosys-fg">{dl.label}</span>
-								<span class="text-[10px] text-rosys-fg-faint">{dl.sub}</span>
+							<a href="/api/patterns/single-size?slug={pattern.pattern_slug}&size={recommendedSize}&format={dl.format}" class="sz-download-btn">
+								<Download class="w-4 h-4" strokeWidth={1.5} />
+								<strong>{dl.label}</strong>
+								<span>{dl.sub}</span>
 							</a>
 						{/each}
 					</div>
 				</div>
 
-				<!-- ═══ CUSTOM FIT (special beta) ═══ -->
+				<!-- Custom fit -->
 				{#if hasDxf}
-					<button type="button" onclick={() => { showCustomFit = !showCustomFit; if (!customFitGrading && !showCustomFit) return; if (showCustomFit && !customFitGrading) calculateCustomFit(); }}
-						class="w-full flex items-center justify-between p-5 rounded-2xl bg-gradient-to-r from-violet-50 to-violet-100/50 border border-violet-200/50 shadow-sm hover:shadow-md transition-all mb-4">
-						<div class="flex items-center gap-3">
-							<div class="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 flex items-center justify-center shadow-md shadow-violet-500/15">
-								<Scissors class="w-5 h-5 text-white" strokeWidth={1.5} />
-							</div>
-							<div class="text-left">
-								<div class="flex items-center gap-2">
-									<p class="text-[14px] font-semibold text-rosys-fg">Want a custom-fit pattern?</p>
-									<span class="text-[10px] font-semibold text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full">Beta</span>
-								</div>
-								<p class="text-[12px] text-rosys-fg-muted mt-0.5">DXF adjusted to your exact body — for cutting machines</p>
+					<button type="button" onclick={() => { showCustomFit = !showCustomFit; if (showCustomFit && !customFitGrading) calculateCustomFit(); }} class="sz-custom-trigger">
+						<div class="sz-custom-trigger-inner">
+							<Scissors class="w-5 h-5 text-violet-500" strokeWidth={1.5} />
+							<div>
+								<strong>Custom-fit pattern</strong>
+								<span class="sz-badge-violet">Beta</span>
 							</div>
 						</div>
-						<ChevronDown class="w-4 h-4 text-violet-400 transition-transform {showCustomFit ? 'rotate-180' : ''}" strokeWidth={1.5} />
+						<ChevronDown class="w-4 h-4 text-violet-300 transition-transform {showCustomFit ? 'rotate-180' : ''}" strokeWidth={1.5} />
 					</button>
 
 					{#if showCustomFit}
-						<div class="bg-white rounded-2xl border border-violet-200/30 shadow-sm p-5 mb-5 page-enter">
+						<div class="sz-custom-panel page-enter">
 							{#if customFitLoading && !customFitGrading}
-								<div class="flex items-center gap-3 py-6 justify-center">
+								<div class="sz-custom-loading">
 									<Loader2 class="w-5 h-5 animate-spin text-violet-500" strokeWidth={2} />
-									<span class="text-[14px] text-rosys-fg-muted">Calculating your custom fit...</span>
-								</div>
-								<div class="space-y-3 text-[13px] text-rosys-fg-muted">
-									<p>Here's what's happening:</p>
-									<div class="flex items-start gap-2"><span class="text-violet-500 mt-0.5">1.</span><span>Finding the closest base pattern size to your body</span></div>
-									<div class="flex items-start gap-2"><span class="text-violet-500 mt-0.5">2.</span><span>Calculating how much each piece needs to scale</span></div>
-									<div class="flex items-start gap-2"><span class="text-violet-500 mt-0.5">3.</span><span>Preserving the original ease and design proportions</span></div>
-									<div class="flex items-start gap-2"><span class="text-violet-500 mt-0.5">4.</span><span>Validating every piece is within 1mm tolerance</span></div>
+									<span>Calculating custom fit...</span>
 								</div>
 							{:else if customFitGrading}
-								<p class="text-[11px] font-semibold text-violet-600 uppercase tracking-[0.1em] mb-4">Custom Fit Preview</p>
-
 								<div class="overflow-x-auto mb-4">
-									<table class="w-full text-[12px]">
-										<thead>
-											<tr class="border-b border-rosys-border/30">
-												<th class="text-left py-1.5 pr-2 text-rosys-fg-faint font-medium"></th>
-												<th class="text-center py-1.5 px-2 text-rosys-fg-faint font-medium">Pattern ({customFitGrading.sample_size})</th>
-												<th class="text-center py-1.5 px-2 font-semibold text-violet-600 bg-violet-50/50 rounded-t-lg">Your custom</th>
-												<th class="text-center py-1.5 px-2 text-rosys-fg-faint font-medium">Change</th>
-											</tr>
-										</thead>
+									<table class="sz-table">
+										<thead><tr>
+											<th></th>
+											<th>Pattern ({customFitGrading.sample_size})</th>
+											<th class="sz-th-violet">Your custom</th>
+											<th>Change</th>
+										</tr></thead>
 										<tbody>
 											{#each [
 												{ label: 'Bust', s: customFitGrading.sample_finished.bust_cm, c: customFitGrading.custom_finished.bust_cm, d: customFitGrading.adjustments.bust_delta_cm },
@@ -770,11 +707,11 @@
 												{ label: 'Hip', s: customFitGrading.sample_finished.hip_cm, c: customFitGrading.custom_finished.hip_cm, d: customFitGrading.adjustments.hip_delta_cm },
 												{ label: 'Length', s: customFitGrading.sample_finished.full_length_cm, c: customFitGrading.custom_finished.full_length_cm, d: customFitGrading.adjustments.length_delta_cm },
 											] as row}
-												<tr class="border-b border-rosys-border/10">
-													<td class="py-2 pr-2 text-rosys-fg-muted font-medium">{row.label}</td>
-													<td class="text-center py-2 px-2">{row.s !== null ? `${row.s}cm` : '—'}</td>
-													<td class="text-center py-2 px-2 font-semibold text-violet-700 bg-violet-50/50">{row.c !== null ? `${typeof row.c === 'number' ? row.c.toFixed(1) : row.c}cm` : '—'}</td>
-													<td class="text-center py-2 px-2 font-medium {row.d && row.d !== 0 ? (row.d > 0 ? 'text-blue-600' : 'text-amber-600') : 'text-rosys-fg-faint'}">{row.d !== null ? `${row.d > 0 ? '+' : ''}${row.d.toFixed(1)}cm` : '—'}</td>
+												<tr>
+													<td class="sz-td-label">{row.label}</td>
+													<td>{row.s !== null ? `${row.s}cm` : '—'}</td>
+													<td class="sz-td-violet">{row.c !== null ? `${typeof row.c === 'number' ? row.c.toFixed(1) : row.c}cm` : '—'}</td>
+													<td class="{row.d && row.d !== 0 ? (row.d > 0 ? 'text-blue-600' : 'text-amber-600') : ''}">{row.d !== null ? `${row.d > 0 ? '+' : ''}${row.d.toFixed(1)}cm` : '—'}</td>
 												</tr>
 											{/each}
 										</tbody>
@@ -782,31 +719,27 @@
 								</div>
 
 								<div class="flex items-center gap-2 mb-4">
-									<span class="text-[11px] font-semibold px-2.5 py-1 rounded-lg border capitalize
-										{customFitGrading.confidence === 'high' ? 'text-emerald-600 bg-emerald-50 border-emerald-200/60' :
-										 customFitGrading.confidence === 'medium' ? 'text-amber-600 bg-amber-50 border-amber-200/60' :
-										 'text-red-600 bg-red-50 border-red-200/60'}">{customFitGrading.confidence} confidence</span>
-									<span class="text-[11px] text-rosys-fg-faint">Width {((customFitGrading.scale_width-1)*100).toFixed(1)}% · Height {((customFitGrading.scale_height-1)*100).toFixed(1)}%</span>
+									<span class="sz-confidence-tag sz-confidence-{customFitGrading.confidence}">{customFitGrading.confidence}</span>
+									<span class="sz-subtle">Scale: {((customFitGrading.scale_width-1)*100).toFixed(1)}% W · {((customFitGrading.scale_height-1)*100).toFixed(1)}% H</span>
 								</div>
 
 								{#if customFitGrading.warnings.length > 0}
 									{#each customFitGrading.warnings as warning}
-										<div class="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200/40 mb-3 text-[12px] text-amber-700">⚠️ {warning}</div>
+										<div class="sz-warning mb-2">⚠ {warning}</div>
 									{/each}
 								{/if}
 
 								{#if customFitError}
-									<div class="p-4 rounded-lg bg-red-50 border border-red-200/40 mb-3"><p class="text-[13px] text-red-700">{customFitError}</p></div>
+									<div class="sz-error-card mb-3">{customFitError}</div>
 								{:else}
-									<button type="button" disabled={customFitLoading} onclick={downloadCustomDxf}
-										class="w-full py-3.5 inline-flex items-center justify-center gap-2 rounded-xl font-semibold text-[14px] text-white bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-600 hover:to-violet-700 active:scale-[0.98] transition-all shadow-sm disabled:opacity-40">
-										{#if customFitLoading}<Loader2 class="w-4 h-4 animate-spin" strokeWidth={2} />Generating DXF...
+									<button type="button" disabled={customFitLoading} onclick={downloadCustomDxf} class="sz-btn-violet w-full">
+										{#if customFitLoading}<Loader2 class="w-4 h-4 animate-spin" strokeWidth={2} />Generating...
 										{:else}<Download class="w-4 h-4" strokeWidth={2} />Download Custom DXF{/if}
 									</button>
 								{/if}
 
-								<p class="text-[11px] text-rosys-fg-faint mt-3 leading-relaxed">
-									The DXF is proportionally scaled from the base pattern. Each piece is validated within ±1mm. Best for simpler shapes — curved sections like armholes may need manual adjustment on complex garments.
+								<p class="sz-subtle mt-3 text-[11px] leading-relaxed">
+									Proportionally scaled from base pattern. Validated within ±1mm.
 								</p>
 							{/if}
 						</div>
@@ -814,39 +747,7 @@
 				{/if}
 			{/if}
 
-			<!-- ── Size chart reference ── -->
-			{#if hasChart}
-				<div class="mt-6 pt-5 border-t border-rosys-border/20">
-					<button type="button" onclick={() => showChart = !showChart}
-						class="flex items-center gap-2 text-[12px] text-rosys-fg-faint hover:text-rosys-fg-muted transition-colors">
-						<ChevronDown class="w-3 h-3 transition-transform {showChart ? 'rotate-180' : ''}" strokeWidth={1.5} />
-						Body size chart
-					</button>
-					{#if showChart}
-						<div class="mt-3 overflow-x-auto page-enter">
-							<table class="w-full text-[11px]">
-								<thead><tr class="border-b border-rosys-border/30">
-									<th class="text-left py-1.5 pr-3 text-rosys-fg-faint font-medium"></th>
-									{#each sizes as s, i}<th class="text-center py-1.5 px-1.5 font-semibold {i === highlightedIndex ? 'text-rosys-500' : 'text-rosys-fg'}">{s}</th>{/each}
-								</tr></thead>
-								<tbody>
-									{#each ['bust_cm','waist_cm','hip_cm'] as key}
-										{@const label = key === 'bust_cm' ? 'Bust' : key === 'waist_cm' ? 'Waist' : 'Hip'}
-										<tr class="border-b border-rosys-border/10">
-											<td class="py-1.5 pr-3 text-rosys-fg-muted">{label}</td>
-											{#each bodyRows as row, i}<td class="text-center py-1.5 px-1.5 {i === highlightedIndex ? 'font-semibold text-rosys-500' : 'text-rosys-fg'}">{(row as any)[key] ? Number((row as any)[key]) : '—'}</td>{/each}
-										</tr>
-									{/each}
-								</tbody>
-							</table>
-						</div>
-					{/if}
-				</div>
-			{/if}
-
-			<!-- Start over -->
-			<button type="button" onclick={reset}
-				class="w-full mt-5 py-3 rounded-xl text-[13px] font-medium text-rosys-fg-faint hover:text-rosys-500 transition-colors flex items-center justify-center gap-2">
+			<button type="button" onclick={reset} class="sz-btn-ghost w-full mt-4">
 				<RotateCcw class="w-3.5 h-3.5" strokeWidth={1.5} />
 				Start over
 			</button>
@@ -855,15 +756,382 @@
 </div>
 
 <style>
-	:global(.sizing-prose h2) {
-		font-size: 11px; font-weight: 600; text-transform: uppercase;
-		letter-spacing: 0.1em; color: var(--color-rosys-fg-faint);
-		margin-top: 1.25rem; margin-bottom: 0.5rem;
+	/* ─── Page Shell ─── */
+	.sz-page { max-width: 480px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+	@media (min-width: 768px) { .sz-page { padding: 3rem 2rem 4rem; max-width: 520px; } }
+
+	.sz-back {
+		display: inline-flex; align-items: center; gap: 6px;
+		font-size: 13px; font-weight: 500; color: var(--color-rosys-fg-faint);
+		margin-bottom: 2.5rem; transition: color 0.15s;
 	}
-	:global(.sizing-prose h2:first-child) { margin-top: 0; }
-	:global(.sizing-prose p) { font-size: 14px; line-height: 1.6; color: var(--color-rosys-fg-muted); margin-bottom: 0.25rem; }
-	:global(.sizing-prose strong) { color: var(--color-rosys-fg); font-weight: 600; }
-	:global(.sizing-prose ul) { list-style: none; padding: 0; }
-	:global(.sizing-prose li) { font-size: 14px; line-height: 1.6; color: var(--color-rosys-fg-muted); padding: 0.25rem 0; border-bottom: 1px solid color-mix(in srgb, var(--color-rosys-border) 20%, transparent); }
-	:global(.sizing-prose li:last-child) { border-bottom: none; }
+	.sz-back:hover { color: var(--color-rosys-500); }
+
+	.sz-enter { animation: fadeUp 0.35s ease-out; }
+	@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+	/* ─── Hero ─── */
+	.sz-hero { text-align: center; margin-bottom: 2.5rem; }
+	.sz-hero-badge {
+		width: 56px; height: 56px; border-radius: 18px; margin: 0 auto 1rem;
+		background: linear-gradient(135deg, var(--color-rosys-500), var(--color-rosys-600));
+		display: flex; align-items: center; justify-content: center; color: white;
+		box-shadow: 0 8px 24px -4px color-mix(in srgb, var(--color-rosys-500) 30%, transparent);
+	}
+	.sz-hero-title {
+		font-size: 32px; font-weight: 800; letter-spacing: -0.04em; line-height: 1.1;
+		color: var(--color-rosys-fg);
+	}
+	.sz-hero-sub { font-size: 15px; color: var(--color-rosys-fg-muted); margin-top: 0.5rem; }
+
+	/* ─── Entry paths ─── */
+	.sz-paths { display: flex; flex-direction: column; gap: 10px; }
+	.sz-path-card {
+		display: flex; align-items: center; gap: 14px; padding: 18px 20px;
+		border-radius: 16px; border: 1px solid; text-align: left; width: 100%;
+		transition: all 0.15s; cursor: pointer;
+	}
+	.sz-path-card:active { transform: scale(0.98); }
+	.sz-path-primary { background: white; border-color: color-mix(in srgb, var(--color-rosys-border) 60%, transparent); }
+	.sz-path-primary:hover { border-color: var(--color-rosys-300); background: var(--color-rosys-50); }
+	.sz-path-secondary { background: color-mix(in srgb, white 80%, transparent); border-color: color-mix(in srgb, var(--color-rosys-border) 30%, transparent); opacity: 0.8; }
+	.sz-path-secondary:hover { opacity: 1; background: white; }
+	.sz-path-icon {
+		width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+		background: linear-gradient(135deg, var(--color-rosys-500), var(--color-rosys-600));
+		display: flex; align-items: center; justify-content: center; color: white;
+		box-shadow: 0 4px 12px -2px color-mix(in srgb, var(--color-rosys-500) 25%, transparent);
+	}
+	.sz-path-icon-muted { background: linear-gradient(135deg, #9ca3af, #6b7280); box-shadow: none; }
+	.sz-path-content { flex: 1; min-width: 0; }
+	.sz-path-title { display: block; font-size: 16px; font-weight: 600; color: var(--color-rosys-fg); }
+	.sz-path-desc { display: block; font-size: 13px; color: var(--color-rosys-fg-muted); margin-top: 2px; }
+
+	/* ─── Badges ─── */
+	.sz-badge-green { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; background: #ecfdf5; color: #059669; flex-shrink: 0; }
+	.sz-badge-amber { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; background: #fffbeb; color: #d97706; flex-shrink: 0; }
+	.sz-badge-violet { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; background: #f5f3ff; color: #7c3aed; margin-left: 6px; }
+
+	/* ─── Section headers ─── */
+	.sz-section-header { display: flex; align-items: center; gap: 14px; margin-bottom: 2rem; }
+	.sz-section-icon {
+		width: 48px; height: 48px; border-radius: 14px; flex-shrink: 0;
+		background: linear-gradient(135deg, var(--color-rosys-500), var(--color-rosys-600));
+		display: flex; align-items: center; justify-content: center; color: white;
+		box-shadow: 0 8px 24px -4px color-mix(in srgb, var(--color-rosys-500) 25%, transparent);
+	}
+	.sz-section-title { font-size: 24px; font-weight: 700; letter-spacing: -0.03em; color: var(--color-rosys-fg); margin: 0; }
+	.sz-section-desc { font-size: 14px; color: var(--color-rosys-fg-muted); margin: 2px 0 0; }
+
+	/* ─── Form ─── */
+	.sz-form { display: flex; flex-direction: column; gap: 14px; margin-bottom: 1.5rem; }
+	.sz-field {}
+	.sz-label { display: block; font-size: 13px; font-weight: 500; color: var(--color-rosys-fg); margin-bottom: 6px; }
+	.sz-label-opt { font-weight: 400; color: var(--color-rosys-fg-faint); }
+	.sz-input-wrap { position: relative; }
+	.sz-input {
+		width: 100%; padding: 14px 50px 14px 18px; border-radius: 14px;
+		border: 1px solid color-mix(in srgb, var(--color-rosys-border) 60%, transparent);
+		font-size: 17px; color: var(--color-rosys-fg); background: white;
+		transition: all 0.15s; outline: none;
+		box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+	}
+	.sz-input::placeholder { color: color-mix(in srgb, var(--color-rosys-fg-faint) 40%, transparent); }
+	.sz-input:focus { border-color: var(--color-rosys-400); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-rosys-400) 12%, transparent); }
+	.sz-input-unit { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); font-size: 13px; color: var(--color-rosys-fg-faint); pointer-events: none; }
+
+	/* ─── Buttons ─── */
+	.sz-btn-primary {
+		display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+		padding: 16px 24px; border-radius: 16px; font-size: 16px; font-weight: 600;
+		color: white; border: none; cursor: pointer;
+		background: linear-gradient(135deg, var(--color-rosys-500), var(--color-rosys-600));
+		box-shadow: 0 4px 16px -2px color-mix(in srgb, var(--color-rosys-500) 30%, transparent);
+		transition: all 0.15s;
+	}
+	.sz-btn-primary:hover { box-shadow: 0 8px 24px -4px color-mix(in srgb, var(--color-rosys-500) 40%, transparent); }
+	.sz-btn-primary:active { transform: scale(0.98); }
+	.sz-btn-primary:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
+
+	.sz-btn-lock {
+		display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
+		padding: 16px 24px; border-radius: 16px; font-size: 16px; font-weight: 600;
+		color: white; border: none; cursor: pointer; margin-top: 8px;
+		background: linear-gradient(135deg, #059669, #047857);
+		box-shadow: 0 4px 16px -2px rgba(5, 150, 105, 0.3);
+		transition: all 0.15s;
+	}
+	.sz-btn-lock:hover { box-shadow: 0 8px 24px -4px rgba(5, 150, 105, 0.4); }
+	.sz-btn-lock:active { transform: scale(0.98); }
+
+	.sz-btn-violet {
+		display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+		padding: 14px 20px; border-radius: 14px; font-size: 14px; font-weight: 600;
+		color: white; border: none; cursor: pointer;
+		background: linear-gradient(135deg, #7c3aed, #6d28d9);
+		box-shadow: 0 4px 12px -2px rgba(124, 58, 237, 0.25);
+		transition: all 0.15s;
+	}
+	.sz-btn-violet:hover { box-shadow: 0 6px 16px -2px rgba(124, 58, 237, 0.35); }
+	.sz-btn-violet:active { transform: scale(0.98); }
+	.sz-btn-violet:disabled { opacity: 0.4; cursor: not-allowed; }
+
+	.sz-btn-outline {
+		padding: 12px 20px; border-radius: 12px; font-size: 14px; font-weight: 600;
+		color: var(--color-rosys-600); background: var(--color-rosys-50);
+		border: none; cursor: pointer; transition: all 0.15s;
+	}
+	.sz-btn-outline:hover { background: var(--color-rosys-100); }
+
+	.sz-btn-ghost {
+		display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+		padding: 10px; font-size: 13px; font-weight: 500; color: var(--color-rosys-fg-faint);
+		background: none; border: none; cursor: pointer; transition: color 0.15s;
+	}
+	.sz-btn-ghost:hover { color: var(--color-rosys-500); }
+
+	.sz-saved-note { text-align: center; font-size: 12px; color: var(--color-rosys-fg-faint); margin-top: 10px; }
+	.sz-error { color: var(--color-rosys-500); font-size: 13px; text-align: center; margin-bottom: 12px; }
+	.sz-error-card { background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 14px 16px; color: #dc2626; font-size: 13px; }
+
+	/* ─── Analysis progress ─── */
+	.sz-analysis-container { }
+
+	.sz-steps {
+		display: flex; align-items: center; gap: 6px; margin-bottom: 2rem;
+		padding: 12px 16px; border-radius: 12px;
+		background: color-mix(in srgb, var(--color-warm-100) 70%, transparent);
+	}
+	.sz-step { display: flex; align-items: center; gap: 6px; flex: 1; }
+	.sz-step-dot {
+		width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+		display: flex; align-items: center; justify-content: center;
+		background: color-mix(in srgb, var(--color-rosys-border) 60%, transparent);
+		color: var(--color-rosys-fg-faint); transition: all 0.3s;
+	}
+	.sz-step-done .sz-step-dot { background: #059669; color: white; }
+	.sz-step-active .sz-step-dot { background: var(--color-rosys-500); color: white; }
+	.sz-step-label { font-size: 11px; font-weight: 500; color: var(--color-rosys-fg-faint); white-space: nowrap; }
+	.sz-step-done .sz-step-label { color: var(--color-rosys-fg); }
+	.sz-step-active .sz-step-label { color: var(--color-rosys-fg); }
+
+	/* ─── Size reveal ─── */
+	.sz-size-reveal { text-align: center; margin-bottom: 1.5rem; animation: sizeReveal 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
+	@keyframes sizeReveal { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+
+	.sz-size-badge, .sz-result-badge {
+		display: inline-flex; flex-direction: column; align-items: center;
+		padding: 20px 40px; border-radius: 20px;
+		background: linear-gradient(145deg, #059669, #047857);
+		box-shadow: 0 12px 32px -8px rgba(5, 150, 105, 0.35);
+	}
+	.sz-size-pattern, .sz-result-pattern { font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: rgba(255,255,255,0.65); font-weight: 600; }
+	.sz-size-value, .sz-result-size { font-size: 48px; font-weight: 800; color: white; letter-spacing: -0.04em; line-height: 1; }
+	.sz-result-hero { text-align: center; margin-bottom: 1.5rem; }
+
+	.sz-size-strip { display: flex; justify-content: center; gap: 5px; margin-top: 14px; }
+	.sz-size-pip {
+		width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+		font-size: 10px; font-weight: 600; transition: all 0.2s;
+		background: var(--color-warm-100); color: var(--color-rosys-fg-faint); border: 1px solid color-mix(in srgb, var(--color-rosys-border) 40%, transparent);
+	}
+	.sz-size-pip-active { background: #059669; color: white; border-color: #059669; transform: scale(1.15); box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3); }
+
+	/* ─── Between sizes ─── */
+	.sz-between {
+		display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 12px;
+		background: #fffbeb; border: 1px solid #fde68a40; margin-bottom: 16px;
+		font-size: 13px; color: #92400e;
+	}
+	.sz-between-icon { font-size: 18px; }
+
+	/* ─── Cards ─── */
+	.sz-card {
+		background: white; border-radius: 16px; padding: 20px;
+		border: 1px solid color-mix(in srgb, var(--color-rosys-border) 40%, transparent);
+		box-shadow: 0 1px 4px rgba(0,0,0,0.03); margin-bottom: 16px;
+	}
+	.sz-card-analysis { }
+	.sz-card-refined { background: var(--color-rosys-50); border-color: color-mix(in srgb, var(--color-rosys-200) 50%, transparent); }
+	.sz-card-label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-rosys-500); margin-bottom: 12px; }
+
+	/* ─── Streaming ─── */
+	.sz-stream-container {
+		background: white; border-radius: 16px; padding: 20px;
+		border: 1px solid color-mix(in srgb, var(--color-rosys-border) 40%, transparent);
+		box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+		max-height: 55vh; overflow-y: auto;
+	}
+	.sz-thinking { display: flex; align-items: center; justify-content: center; padding: 32px 0; }
+	.sz-thinking-dots { display: flex; gap: 5px; }
+	.sz-thinking-dots span {
+		width: 6px; height: 6px; border-radius: 50%; background: var(--color-rosys-300);
+		animation: dotPulse 1.4s ease-in-out infinite;
+	}
+	.sz-thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+	.sz-thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+	@keyframes dotPulse { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1.2); } }
+
+	.sz-cursor { display: inline-block; width: 2px; height: 16px; background: var(--color-rosys-400); border-radius: 1px; margin-left: 2px; animation: cursorBlink 0.8s ease infinite; }
+	@keyframes cursorBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+	/* ─── Fit strip ─── */
+	.sz-fit-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+	.sz-fit-item {
+		display: flex; flex-direction: column; align-items: center; gap: 2px;
+		padding: 12px 8px; border-radius: 12px; background: white;
+		border: 1px solid color-mix(in srgb, var(--color-rosys-border) 30%, transparent);
+	}
+	.sz-fit-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-rosys-fg-faint); }
+	.sz-fit-value { font-size: 18px; font-weight: 700; color: var(--color-rosys-fg); }
+	.sz-fit-tag { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 6px; text-transform: capitalize; }
+	.sz-fit-exact { background: #ecfdf5; color: #059669; }
+	.sz-fit-comfortable { background: #eff6ff; color: #2563eb; }
+	.sz-fit-tight { background: #fffbeb; color: #d97706; }
+	.sz-fit-loose { background: #f5f3ff; color: #7c3aed; }
+
+	/* ─── Expandable sections ─── */
+	.sz-expandables { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
+	.sz-expand-trigger {
+		display: flex; align-items: center; gap: 10px; width: 100%;
+		padding: 14px 16px; background: white; border: none; cursor: pointer;
+		font-size: 13px; font-weight: 500; color: var(--color-rosys-fg);
+		border-radius: 12px; transition: background 0.15s; text-align: left;
+	}
+	.sz-expand-trigger:hover { background: var(--color-warm-50); }
+	.sz-expand-trigger > :last-child { margin-left: auto; }
+	.sz-expand-content { padding: 0 16px 16px; }
+
+	/* ─── Tables ─── */
+	.sz-table { width: 100%; font-size: 12px; border-collapse: collapse; }
+	.sz-table th { padding: 6px 6px; text-align: center; font-weight: 500; color: var(--color-rosys-fg-faint); border-bottom: 1px solid color-mix(in srgb, var(--color-rosys-border) 40%, transparent); }
+	.sz-table td { padding: 6px 6px; text-align: center; color: var(--color-rosys-fg); border-bottom: 1px solid color-mix(in srgb, var(--color-rosys-border) 15%, transparent); }
+	.sz-table th:first-child, .sz-table td:first-child { text-align: left; }
+	.sz-th-active { color: #059669 !important; font-weight: 700 !important; }
+	.sz-td-active { color: #059669; font-weight: 600; background: color-mix(in srgb, #059669 5%, transparent); }
+	.sz-td-label { color: var(--color-rosys-fg-muted); font-weight: 500; }
+	.sz-th-violet { color: #7c3aed !important; font-weight: 700 !important; }
+	.sz-td-violet { color: #7c3aed; font-weight: 600; background: color-mix(in srgb, #7c3aed 5%, transparent); }
+
+	/* ─── Profile grid ─── */
+	.sz-profile-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+	.sz-profile-item {
+		display: flex; flex-direction: column; align-items: center; gap: 2px;
+		padding: 10px 6px; border-radius: 10px;
+		background: var(--color-warm-50); border: 1px solid color-mix(in srgb, var(--color-rosys-border) 25%, transparent);
+	}
+	.sz-profile-val { font-size: 18px; font-weight: 700; color: var(--color-rosys-fg); }
+	.sz-profile-unit { font-size: 11px; font-weight: 400; color: var(--color-rosys-fg-faint); }
+	.sz-profile-label { font-size: 10px; color: var(--color-rosys-fg-faint); }
+
+	/* ─── Preferences ─── */
+	.sz-prefs-trigger {
+		display: flex; align-items: center; gap: 10px; width: 100%;
+		padding: 16px 18px; border-radius: 14px; border: none; cursor: pointer;
+		background: linear-gradient(135deg, var(--color-rosys-50), white);
+		border: 1px solid color-mix(in srgb, var(--color-rosys-200) 50%, transparent);
+		font-size: 14px; font-weight: 600; color: var(--color-rosys-fg);
+		transition: all 0.15s; text-align: left; margin-bottom: 12px;
+	}
+	.sz-prefs-trigger:hover { border-color: var(--color-rosys-300); }
+
+	.sz-prefs-panel {
+		background: white; border-radius: 16px; padding: 20px;
+		border: 1px solid color-mix(in srgb, var(--color-rosys-border) 30%, transparent);
+		margin-bottom: 12px;
+	}
+	.sz-pref-group { margin-bottom: 16px; }
+	.sz-pref-group:last-of-type { margin-bottom: 20px; }
+	.sz-pref-title { display: block; font-size: 12px; font-weight: 600; color: var(--color-rosys-fg); margin-bottom: 8px; }
+	.sz-pref-opts { display: flex; gap: 6px; flex-wrap: wrap; }
+
+	.sz-pref-btn {
+		flex: 1; min-width: 0; padding: 10px 8px; border-radius: 10px;
+		font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+		background: var(--color-warm-50); color: var(--color-rosys-fg-muted);
+		border: 1px solid color-mix(in srgb, var(--color-rosys-border) 40%, transparent);
+		text-align: center;
+	}
+	.sz-pref-btn:hover { border-color: var(--color-rosys-300); }
+	.sz-pref-btn-sm { font-size: 11px; padding: 8px 6px; }
+	:global(.sz-pref-active) {
+		background: var(--color-rosys-500) !important; color: white !important;
+		border-color: var(--color-rosys-500) !important;
+		box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--color-rosys-500) 30%, transparent);
+	}
+
+	.sz-pref-area { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+	.sz-pref-area-label { font-size: 11px; color: var(--color-rosys-fg-muted); width: 40px; flex-shrink: 0; }
+
+	/* ─── Downloads ─── */
+	.sz-locked-banner {
+		display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+		border-radius: 14px; background: #ecfdf5; border: 1px solid #a7f3d040;
+		margin-bottom: 16px; font-size: 14px; color: var(--color-rosys-fg);
+	}
+	.sz-locked-banner strong { display: block; }
+
+	.sz-downloads {
+		background: white; border-radius: 16px; padding: 20px;
+		border: 1px solid color-mix(in srgb, var(--color-rosys-border) 40%, transparent);
+		box-shadow: 0 1px 4px rgba(0,0,0,0.03); margin-bottom: 16px;
+	}
+	.sz-downloads-title { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-rosys-fg-faint); }
+	.sz-downloads-sub { display: block; font-size: 13px; color: var(--color-rosys-fg-muted); margin: 4px 0 14px; }
+	.sz-download-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+	.sz-download-btn {
+		display: flex; flex-direction: column; align-items: center; gap: 4px;
+		padding: 14px 8px; border-radius: 12px;
+		background: var(--color-rosys-50); border: 1px solid color-mix(in srgb, var(--color-rosys-200) 50%, transparent);
+		color: var(--color-rosys-fg); text-decoration: none; transition: all 0.15s; text-align: center;
+	}
+	.sz-download-btn:hover { background: var(--color-rosys-100); border-color: var(--color-rosys-300); }
+	.sz-download-btn:active { transform: scale(0.96); }
+	.sz-download-btn strong { font-size: 14px; }
+	.sz-download-btn span { font-size: 10px; color: var(--color-rosys-fg-faint); }
+	.sz-download-btn :global(svg) { color: var(--color-rosys-400); }
+
+	/* ─── Custom fit ─── */
+	.sz-custom-trigger {
+		display: flex; align-items: center; justify-content: space-between; width: 100%;
+		padding: 18px 20px; border-radius: 14px; border: none; cursor: pointer;
+		background: linear-gradient(135deg, #f5f3ff, #ede9fe80);
+		border: 1px solid #ddd6fe50; transition: all 0.15s; text-align: left; margin-bottom: 12px;
+	}
+	.sz-custom-trigger:hover { border-color: #c4b5fd; }
+	.sz-custom-trigger-inner { display: flex; align-items: center; gap: 12px; }
+	.sz-custom-trigger-inner strong { font-size: 14px; color: var(--color-rosys-fg); }
+
+	.sz-custom-panel {
+		background: white; border-radius: 16px; padding: 20px;
+		border: 1px solid #ddd6fe30; margin-bottom: 16px;
+	}
+	.sz-custom-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 24px 0; font-size: 14px; color: var(--color-rosys-fg-muted); }
+
+	.sz-confidence-tag { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 8px; text-transform: capitalize; }
+	.sz-confidence-high { background: #ecfdf5; color: #059669; }
+	.sz-confidence-medium { background: #fffbeb; color: #d97706; }
+	.sz-confidence-low { background: #fef2f2; color: #dc2626; }
+
+	.sz-warning { padding: 10px 14px; border-radius: 10px; background: #fffbeb; border: 1px solid #fde68a40; font-size: 12px; color: #92400e; }
+
+	/* ─── Utilities ─── */
+	.sz-subtle { font-size: 12px; color: var(--color-rosys-fg-faint); font-weight: 400; }
+
+	/* ─── Prose (AI output) ─── */
+	:global(.sz-prose h2) {
+		font-size: 11px; font-weight: 700; text-transform: uppercase;
+		letter-spacing: 0.1em; color: var(--color-rosys-fg-faint);
+		margin: 1.5rem 0 0.5rem; padding-bottom: 6px;
+		border-bottom: 1px solid color-mix(in srgb, var(--color-rosys-border) 25%, transparent);
+	}
+	:global(.sz-prose h2:first-child) { margin-top: 0; }
+	:global(.sz-prose p) { font-size: 14px; line-height: 1.65; color: var(--color-rosys-fg-secondary); margin-bottom: 4px; }
+	:global(.sz-prose strong) { color: var(--color-rosys-fg); font-weight: 600; }
+	:global(.sz-prose ul) { list-style: none; padding: 0; margin: 0; }
+	:global(.sz-prose li) {
+		font-size: 14px; line-height: 1.65; color: var(--color-rosys-fg-secondary);
+		padding: 6px 0; border-bottom: 1px solid color-mix(in srgb, var(--color-rosys-border) 15%, transparent);
+	}
+	:global(.sz-prose li:last-child) { border-bottom: none; }
 </style>
