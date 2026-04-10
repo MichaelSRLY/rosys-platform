@@ -67,12 +67,16 @@
 
 	// Derived
 	const canSubmit = $derived(!!(bust && waist && hip));
-	const refinedSize = $derived(() => {
-		if (!refinedText) return null;
-		const m = refinedText.match(/(?:suggest|recommend)\s+Size\s+([A-Z0-9]{1,4})/i);
+
+	// Extract the AI-recommended size from streamed text — overrides deterministic when AI disagrees
+	function extractSizeFromText(text: string): string | null {
+		if (!text) return null;
+		// Match "Size S", "Size XL", "suggest Size M", "recommend Size L", "I'd suggest Size S"
+		const m = text.match(/Size\s+([A-Z0-9]{1,4})\b/i);
 		return m ? m[1].toUpperCase() : null;
-	});
-	const recommendedSize = $derived(refinedSize() ?? deterministicResult?.recommended_size ?? null);
+	}
+	const aiSize = $derived(extractSizeFromText(refinedText) ?? extractSizeFromText(streamedText));
+	const recommendedSize = $derived(aiSize ?? deterministicResult?.recommended_size ?? null);
 	const highlightedIndex = $derived(recommendedSize ? (chartData?.sizes ?? sizes).indexOf(recommendedSize) : -1);
 	const hasPreferences = $derived(!!(fitPreference || bustPref || waistPref || hipPref || lengthPref || fabricStretch));
 
