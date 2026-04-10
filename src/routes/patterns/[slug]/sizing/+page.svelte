@@ -143,7 +143,11 @@
 			if (!res.ok) { errorMsg = 'Refinement failed.'; isRefining = false; return; }
 			await consumeStream(res);
 		} catch (e: any) { errorMsg = e.message || 'Connection failed.'; }
-		finally { isRefining = false; }
+		finally { isRefining = false; scrollToResults(); }
+	}
+
+	function scrollToResults() {
+		setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
 	}
 
 	async function calculateCustomFit() {
@@ -308,43 +312,113 @@
 			<button onclick={() => phase = 'entry'} class="btn-ghost w-full mt-1"><ArrowLeft class="w-3.5 h-3.5" strokeWidth={1.5} /> Back</button>
 		</div>
 
-	<!-- ANALYZING — beautiful loading, no streamed text visible -->
+	<!-- ANALYZING — Perplexity-style live data surfacing -->
 	{:else if phase === 'analyzing'}
-		<div class="fade-in analyzing-screen">
-			<!-- Measurement recap -->
-			<div class="recap">
-				{#each [{l:'Bust',v:bust},{l:'Waist',v:waist},{l:'Hip',v:hip},{l:'Height',v:height}] as m, i}
-					{#if m.v}
-						<div class="recap-item" style="animation-delay:{i * 0.1}s">
-							<span class="recap-val">{m.v}</span>
-							<span class="recap-label">{m.l}</span>
-						</div>
-					{/if}
-				{/each}
+		<div class="fade-in">
+			<!-- Header -->
+			<div class="an-header">
+				<div class="an-orb"><div class="an-orb-inner"></div></div>
+				<div>
+					<h1 class="an-title">Analyzing {pattern.pattern_name}</h1>
+					<p class="an-sub">Finding your perfect fit</p>
+				</div>
 			</div>
 
-			<!-- Progress steps -->
-			<div class="steps">
-				{#each [
-					{ text: 'Comparing against size chart', done: analysisStep >= 2 },
-					{ text: 'Building body profile', done: analysisStep >= 2 },
-					{ text: 'Generating your recommendation', done: !isStreaming && analysisStep >= 3 },
-				] as step, i}
-					<div class="step" class:done={step.done} class:active={!step.done && analysisStep >= i + 1}>
-						<div class="step-indicator">
-							{#if step.done}<Check class="w-3.5 h-3.5" strokeWidth={3} />
-							{:else if !step.done && analysisStep >= i + 1}<Loader2 class="w-3.5 h-3.5 animate-spin" strokeWidth={2} />
-							{:else}<span class="step-num">{i + 1}</span>{/if}
-						</div>
-						<span>{step.text}</span>
+			<!-- Live steps with data cards surfacing -->
+			<div class="an-timeline">
+				<!-- Step 1: Size chart comparison -->
+				<div class="an-step" class:an-done={analysisStep >= 2} class:an-active={analysisStep < 2}>
+					<div class="an-step-line">
+						<div class="an-dot">{#if analysisStep >= 2}<Check class="w-3 h-3" strokeWidth={3} />{:else}<Loader2 class="w-3 h-3 animate-spin" strokeWidth={2} />{/if}</div>
 					</div>
-				{/each}
-			</div>
+					<div class="an-step-body">
+						<span class="an-step-title">Comparing against size chart</span>
+						{#if analysisStep >= 2 && deterministicResult}
+							<div class="an-data-card page-enter">
+								<div class="an-data-row">
+									<span>Best match</span>
+									<strong class="text-emerald-600">{deterministicResult.recommended_size}</strong>
+								</div>
+								<div class="an-data-row">
+									<span>Match confidence</span>
+									<span class="an-score">{(100 - deterministicResult.score).toFixed(0)}%</span>
+								</div>
+								{#if deterministicResult.between_sizes}
+									<div class="an-data-row">
+										<span>Between sizes</span>
+										<span>{deterministicResult.lower_size} — {deterministicResult.upper_size}</span>
+									</div>
+								{/if}
+								{#if deterministicResult.fit}
+									<div class="an-fit-row">
+										{#each [{l:'Bust',d:deterministicResult.fit.bust},{l:'Waist',d:deterministicResult.fit.waist},{l:'Hip',d:deterministicResult.fit.hip}] as {l,d}}
+											{#if d}<div class="an-fit-chip"><span class="an-fit-chip-label">{l}</span><span class="an-fit-chip-tag {d.fit}">{d.fit}</span></div>{/if}
+										{/each}
+									</div>
+								{/if}
+							</div>
+						{/if}
+					</div>
+				</div>
 
-			<!-- Pulsing pattern name -->
-			<div class="analyzing-pattern">
-				<span>{pattern.pattern_name}</span>
-				<div class="analyzing-dots"><span></span><span></span><span></span></div>
+				<!-- Step 2: Body profile -->
+				<div class="an-step" class:an-done={analysisStep >= 2} class:an-active={analysisStep === 1} class:an-pending={analysisStep < 1}>
+					<div class="an-step-line">
+						<div class="an-dot">{#if analysisStep >= 2}<Check class="w-3 h-3" strokeWidth={3} />{:else if analysisStep >= 1}<Loader2 class="w-3 h-3 animate-spin" strokeWidth={2} />{:else}<span class="an-dot-num">2</span>{/if}</div>
+					</div>
+					<div class="an-step-body">
+						<span class="an-step-title">Building body profile</span>
+						{#if analysisStep >= 2 && profile}
+							<div class="an-data-card page-enter">
+								<div class="an-profile-chips">
+									{#each [{l:'Shoulder',v:profile.shoulder_cm},{l:'Arm',v:profile.arm_length_cm},{l:'Leg',v:profile.leg_length_cm}] as m}
+										{#if m.v}<div class="an-profile-chip"><span class="an-profile-val">{m.v}</span><span class="an-profile-label">{m.l}</span></div>{/if}
+									{/each}
+								</div>
+								<span class="an-data-note">Predicted from 59,000 body measurement records</span>
+							</div>
+						{/if}
+					</div>
+				</div>
+
+				<!-- Step 3: Recommendation -->
+				<div class="an-step" class:an-done={!isStreaming && analysisStep >= 3} class:an-active={isStreaming && analysisStep >= 3} class:an-pending={analysisStep < 3}>
+					<div class="an-step-line">
+						<div class="an-dot">{#if !isStreaming && analysisStep >= 3}<Check class="w-3 h-3" strokeWidth={3} />{:else if analysisStep >= 3}<Loader2 class="w-3 h-3 animate-spin" strokeWidth={2} />{:else}<span class="an-dot-num">3</span>{/if}</div>
+					</div>
+					<div class="an-step-body">
+						<span class="an-step-title">Generating your recommendation</span>
+						{#if analysisStep >= 3}
+							<div class="an-data-card page-enter">
+								{#if deterministicResult?.ease}
+									<div class="an-data-row">
+										<span>Ease at {recommendedSize || deterministicResult?.recommended_size}</span>
+										<span>{deterministicResult.ease.bust_cm != null ? `Bust ${deterministicResult.ease.bust_cm > 0 ? '+' : ''}${deterministicResult.ease.bust_cm.toFixed(0)}cm` : ''}</span>
+									</div>
+								{/if}
+								{#if chartData?.finished?.length > 0}
+									{@const recFinished = chartData.finished.find((r: any) => r.size === (recommendedSize || deterministicResult?.recommended_size))}
+									{#if recFinished}
+										<div class="an-data-row">
+											<span>Finished bust</span>
+											<span>{recFinished.bust_cm}cm</span>
+										</div>
+										{#if recFinished.full_length_cm}
+											<div class="an-data-row">
+												<span>Garment length</span>
+												<span>{recFinished.full_length_cm}cm</span>
+											</div>
+										{/if}
+									{/if}
+								{/if}
+								<div class="an-thinking">
+									<div class="an-thinking-bar"><div class="an-thinking-fill"></div></div>
+									<span>Analyzing fit, adjustments & fabric...</span>
+								</div>
+							</div>
+						{/if}
+					</div>
+				</div>
 			</div>
 
 			{#if errorMsg}<div class="err-box">{errorMsg}</div>{/if}
@@ -704,31 +778,60 @@
 	.err { color: var(--color-rosys-500); font-size: 13px; text-align: center; margin-bottom: 12px; }
 	.err-box { background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 14px; color: #dc2626; font-size: 13px; margin-top: 16px; }
 
-	/* ANALYZING SCREEN */
-	.analyzing-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; gap: 2rem; }
+	/* ANALYZING — Perplexity-style timeline */
+	.an-header { display: flex; align-items: center; gap: 16px; margin-bottom: 2rem; }
+	.an-orb { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--color-rosys-100), var(--color-rosys-200)); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+	.an-orb-inner { width: 20px; height: 20px; border-radius: 50%; background: linear-gradient(135deg, var(--color-rosys-400), var(--color-rosys-500)); animation: orbPulse 2s ease-in-out infinite; }
+	@keyframes orbPulse { 0%,100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.2); opacity: 1; } }
+	.an-title { font-size: 20px; font-weight: 700; color: var(--color-rosys-fg); letter-spacing: -0.02em; margin: 0; }
+	.an-sub { font-size: 13px; color: var(--color-rosys-fg-faint); margin: 2px 0 0; }
 
-	.recap { display: flex; gap: 16px; justify-content: center; }
-	.recap-item { text-align: center; animation: fadeUp 0.4s ease-out both; }
-	.recap-val { display: block; font-size: 28px; font-weight: 800; color: var(--color-rosys-fg); letter-spacing: -0.03em; }
-	.recap-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-rosys-fg-faint); }
+	.an-timeline { display: flex; flex-direction: column; gap: 0; }
 
-	.steps { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 280px; }
-	.step { display: flex; align-items: center; gap: 12px; opacity: 0.4; transition: all 0.4s ease; }
-	.step.done, .step.active { opacity: 1; }
-	.step-indicator { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--color-warm-200); color: var(--color-rosys-fg-faint); font-size: 11px; font-weight: 600; transition: all 0.3s; flex-shrink: 0; }
-	.step.done .step-indicator { background: #059669; color: white; }
-	.step.active .step-indicator { background: var(--color-rosys-500); color: white; }
-	.step-num { font-size: 11px; }
-	.step span:not(.step-num) { font-size: 14px; color: var(--color-rosys-fg-muted); }
-	.step.done span, .step.active span { color: var(--color-rosys-fg); }
+	.an-step { display: flex; gap: 0; opacity: 0.35; transition: opacity 0.4s ease; }
+	.an-step.an-done, .an-step.an-active { opacity: 1; }
 
-	.analyzing-pattern { text-align: center; }
-	.analyzing-pattern > span { font-size: 15px; color: var(--color-rosys-fg-muted); font-weight: 500; }
-	.analyzing-dots { display: flex; gap: 4px; justify-content: center; margin-top: 8px; }
-	.analyzing-dots span { width: 5px; height: 5px; border-radius: 50%; background: var(--color-rosys-300); animation: pulse 1.4s ease-in-out infinite; }
-	.analyzing-dots span:nth-child(2) { animation-delay: 0.2s; }
-	.analyzing-dots span:nth-child(3) { animation-delay: 0.4s; }
-	@keyframes pulse { 0%,80%,100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1.3); } }
+	.an-step-line { display: flex; flex-direction: column; align-items: center; width: 32px; flex-shrink: 0; padding-top: 2px; }
+	.an-dot { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--color-warm-200); color: var(--color-rosys-fg-faint); transition: all 0.3s; }
+	.an-done .an-dot { background: #059669; color: white; }
+	.an-active .an-dot { background: var(--color-rosys-500); color: white; }
+	.an-dot-num { font-size: 11px; font-weight: 600; }
+
+	.an-step-body { flex: 1; padding: 0 0 24px 12px; border-left: 2px solid var(--color-warm-200); margin-left: -1px; }
+	.an-step:last-child .an-step-body { border-left-color: transparent; }
+	.an-done .an-step-body { border-left-color: #a7f3d0; }
+	.an-active .an-step-body { border-left-color: color-mix(in srgb, var(--color-rosys-300) 50%, transparent); }
+
+	.an-step-title { display: block; font-size: 14px; font-weight: 600; color: var(--color-rosys-fg); margin-bottom: 8px; padding-top: 2px; }
+	.an-pending .an-step-title { color: var(--color-rosys-fg-faint); }
+
+	.an-data-card { background: white; border-radius: 12px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--color-rosys-border) 35%, transparent); box-shadow: 0 1px 4px rgba(0,0,0,0.03); }
+	.an-data-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 13px; border-bottom: 1px solid color-mix(in srgb, var(--color-rosys-border) 15%, transparent); }
+	.an-data-row:last-child { border-bottom: none; }
+	.an-data-row span { color: var(--color-rosys-fg-muted); }
+	.an-data-row strong { color: var(--color-rosys-fg); }
+	.an-score { font-weight: 700; color: #059669; }
+	.an-data-note { font-size: 10px; color: var(--color-rosys-fg-faint); margin-top: 6px; display: block; }
+
+	.an-fit-row { display: flex; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--color-rosys-border) 15%, transparent); }
+	.an-fit-chip { display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 6px; background: var(--color-warm-50); }
+	.an-fit-chip-label { font-size: 11px; color: var(--color-rosys-fg-muted); }
+	.an-fit-chip-tag { font-size: 10px; font-weight: 700; text-transform: capitalize; padding: 1px 5px; border-radius: 4px; }
+	.an-fit-chip-tag.exact { background: #ecfdf5; color: #059669; }
+	.an-fit-chip-tag.comfortable { background: #eff6ff; color: #2563eb; }
+	.an-fit-chip-tag.tight { background: #fffbeb; color: #d97706; }
+	.an-fit-chip-tag.loose { background: #f5f3ff; color: #7c3aed; }
+
+	.an-profile-chips { display: flex; gap: 8px; }
+	.an-profile-chip { text-align: center; flex: 1; padding: 8px 4px; border-radius: 8px; background: var(--color-warm-50); }
+	.an-profile-val { display: block; font-size: 16px; font-weight: 700; color: var(--color-rosys-fg); }
+	.an-profile-label { font-size: 10px; color: var(--color-rosys-fg-faint); }
+
+	.an-thinking { margin-top: 10px; }
+	.an-thinking span { font-size: 12px; color: var(--color-rosys-fg-faint); display: block; margin-top: 6px; }
+	.an-thinking-bar { height: 3px; border-radius: 2px; background: var(--color-warm-200); overflow: hidden; }
+	.an-thinking-fill { height: 100%; width: 40%; border-radius: 2px; background: linear-gradient(90deg, var(--color-rosys-300), var(--color-rosys-500)); animation: thinkSlide 2s ease-in-out infinite; }
+	@keyframes thinkSlide { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
 
 	/* RESULTS */
 	.results > * { animation: fadeUp 0.3s ease-out both; }
