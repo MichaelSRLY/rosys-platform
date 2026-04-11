@@ -414,7 +414,34 @@ The project uses `@sveltejs/adapter-vercel`. Python scripts (pikepdf) need Pytho
 
 ---
 
-## 13. Key Gotchas
+## 13. Reference Project (rosys-app)
+
+The original React SPA lives at `/Users/dr.contexter/projects/rosys-app` (repo: `MichaelSRLY/rosys-app`). We are migrating features from it to this SvelteKit platform. When building new features, check rosys-app first — it may already have the logic, database queries, or UI patterns you need.
+
+| Aspect | rosys-app (React SPA) | rosys-platform (SvelteKit) |
+|---|---|---|
+| **Path** | `/Users/dr.contexter/projects/rosys-app` | `/Users/dr.contexter/projects/rosys-platform` |
+| **Framework** | React 18 + Vite + Zustand | SvelteKit 5 + Tailwind 4 |
+| **Deploy** | `rosyspatterns.vercel.app` | `platform-rosys.vercel.app` |
+| **Store** | `src/store.ts` (Zustand) | SvelteKit server loaders + `$state` |
+| **AI** | OpenAI GPT-4o (client-side, `dangerouslyAllowBrowser`) | Anthropic/Ollama/Gemini (server-side, streaming SSE) |
+| **Auth** | Supabase (same project `lahzrlyhojyfadjasdrc`) | Supabase (same project) |
+
+**What to look at in rosys-app:**
+- `src/components/Magazine.tsx` (~4k lines) — magazine viewer, comments, likes, downloads, Instagram previews
+- `src/components/Login.tsx` — registration flow with community key `Community2025`
+- `src/store.ts` — Zustand store with all Supabase queries (comments, likes, sessions, page_views, downloads, interactions, voting)
+- `src/components/SizeAssistant.tsx` — old sizing UI (OpenAI-based, do NOT use — the platform version is far superior)
+- `src/lib/tracking.ts` — analytics tracking helpers
+
+**Shared infrastructure (same Supabase project):**
+Both apps read/write the same Supabase tables (profiles, comments, likes, sessions, etc.) and the same Supabase Storage buckets. Database schema changes affect both apps.
+
+**rosys-app CLAUDE.md:** `/Users/dr.contexter/projects/rosys-app/CLAUDE.md` has deployment instructions and patterns for the React SPA.
+
+---
+
+## 14. Key Gotchas
 
 1. **Body chart can be empty** — many patterns only have finished measurements. The size matcher detects this and switches to finished-chart matching with negative-ease penalty.
 
