@@ -170,15 +170,83 @@ function scaleDxf(
 }
 
 /**
- * Generate custom-fit pattern files in all available formats.
- * PDFs are scaled using pdf-lib page transforms.
- * DXF is scaled by modifying geometry coordinates.
+ * Extract a single-size PDF by calling the single-size extraction endpoint.
+ * This uses the Python pikepdf color-filtering logic to remove all other size lines.
+ */
+async function extractSingleSizePdf(
+	slug: string,
+	size: string,
+	format: string
+): Promise<Uint8Array | null> {
+	const admin = getAdmin();
+
+	// Check cache first
+	const cachePath = `${slug}/single-size/${size}/${format}.pdf`;
+	const { data: cached } = await admin.storage
+		.from('pattern-files')
+		.download(cachePath);
+
+	if (cached) {
+		return new Uint8Array(await cached.arrayBuffer());
+	}
+
+	// Not cached — try to extract using Python script
+	try {
+		const { exec } = await import('child_process');
+		const { promisify } = await import('util');
+		const { writeFile: fsWrite, readFile: fsRead, unlink: fsUnlink } = await import('fs/promises');
+		const { tmpdir } = await import('os');
+		const { join } = await import('path');
+		const { randomUUID } = await import('crypto');
+		const execAsync = promisify(exec);
+
+		// Download original multi-size PDF
+		const originalPath = `${slug}/${format}/${format}.pdf`;
+		const { data: original, error } = await admin.storage
+			.from('pattern-files')
+			.download(originalPath);
+
+		if (error || !original) return null;
+
+		const tmpId = randomUUID();
+		const inputPath = join(tmpdir(), `${tmpId}-input.pdf`);
+		const outputPath = join(tmpdir(), `${tmpId}-output.pdf`);
+
+		try {
+			await fsWrite(inputPath, Buffer.from(await original.arrayBuffer()));
+			const scriptPath = join(process.cwd(), 'scripts', 'extract-single-size.py');
+			await execAsync(`python3 "${scriptPath}" "${inputPath}" "${size}" "${outputPath}"`, { timeout: 30000 });
+			const outputBuffer = await fsRead(outputPath);
+
+			// Cache for next time
+			await admin.storage.from('pattern-files').upload(cachePath, outputBuffer, { contentType: 'application/pdf', upsert: true });
+
+			return new Uint8Array(outputBuffer);
+		} finally {
+			await fsUnlink(inputPath).catch(() => {});
+			await fsUnlink(outputPath).catch(() => {});
+		}
+	} catch (e: any) {
+		console.error(`Single-size extraction failed for ${slug}/${size}/${format}:`, e.message);
+		return null;
+	}
+}
+
+/**
+ * Generate custom-fit pattern files.
+ *
+ * For PDFs: extracts the single closest size first (removes other color lines),
+ * then scales the single-size PDF proportionally. Customer gets a clean PDF
+ * with only their custom-fit line.
+ *
+ * For DXF: scales geometry coordinates directly (DXF is already single-size).
  */
 export async function generateCustomPatternFiles(
 	patternSlug: string,
 	patternName: string,
 	scale: ScaleFactors,
-	customLabel: string
+	customLabel: string,
+	baseSize?: string
 ): Promise<PatternFile[]> {
 	const available = await listPatternFiles(patternSlug);
 	if (available.length === 0) {
@@ -197,9 +265,8 @@ export async function generateCustomPatternFiles(
 
 	for (const file of available) {
 		try {
-			const raw = await downloadFile(file.path);
-
 			if (file.format === 'dxf') {
+				const raw = await downloadFile(file.path);
 				const text = new TextDecoder().decode(raw);
 				const scaled = scaleDxf(text, scale, customLabel);
 				results.push({
@@ -210,7 +277,20 @@ export async function generateCustomPatternFiles(
 					mimeType: 'application/dxf'
 				});
 			} else {
-				const scaled = await scalePdf(raw, scale);
+				// PDF: first extract single size, then scale
+				let pdfBytes: Uint8Array | null = null;
+
+				if (baseSize) {
+					// Try single-size extraction (color filtering)
+					pdfBytes = await extractSingleSizePdf(patternSlug, baseSize, file.format);
+				}
+
+				if (!pdfBytes) {
+					// Fallback: use the full multi-size PDF (all lines visible)
+					pdfBytes = await downloadFile(file.path);
+				}
+
+				const scaled = await scalePdf(pdfBytes, scale);
 				results.push({
 					format: file.format as PatternFile['format'],
 					label: formatLabels[file.format] || file.format,
@@ -234,7 +314,7 @@ export async function generateCustomDxfFile(
 	scale: ScaleFactors,
 	customLabel: string
 ): Promise<PatternFile> {
-	const files = await generateCustomPatternFiles(patternSlug, patternName, scale, customLabel);
+	const files = await generateCustomPatternFiles(patternSlug, patternName, scale, customLabel, undefined);
 	const dxf = files.find(f => f.format === 'dxf');
 	if (!dxf) throw new Error(`No DXF file found for ${patternSlug}`);
 	return dxf;

@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rosys Sizing System — Complete Technical Guide</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, sans-serif; background: #fdfcfb; color: #1a1a1a; line-height: 1.7; -webkit-font-smoothing: antialiased; }
+
+  .page { max-width: 860px; margin: 0 auto; padding: 3rem 1.5rem 6rem; }
+  @media (max-width: 640px) { .page { padding: 2rem 1rem 4rem; } }
+
+  /* Header */
+  .header { text-align: center; margin-bottom: 4rem; padding-bottom: 2rem; border-bottom: 2px solid #ede5dd; }
+  .header-badge { display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #e8366d, #c4245a); color: white; font-size: 12px; font-weight: 700; padding: 6px 14px; border-radius: 20px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 1rem; }
+  .header h1 { font-size: 36px; font-weight: 800; letter-spacing: -0.04em; line-height: 1.1; margin-bottom: 0.75rem; }
+  .header p { font-size: 16px; color: #666; max-width: 520px; margin: 0 auto; }
+  .header .meta { margin-top: 1rem; font-size: 13px; color: #999; }
+
+  /* TOC */
+  .toc { background: white; border-radius: 16px; padding: 24px 28px; border: 1px solid #ede5dd; margin-bottom: 3rem; }
+  .toc h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #999; margin-bottom: 12px; }
+  .toc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  @media (max-width: 640px) { .toc-grid { grid-template-columns: 1fr; } }
+  .toc a { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; text-decoration: none; font-size: 14px; font-weight: 500; color: #3d3d3d; transition: all 0.15s; }
+  .toc a:hover { background: #fff5f7; color: #e8366d; }
+  .toc-num { width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; background: #f7f3ef; color: #999; flex-shrink: 0; }
+
+  /* Section */
+  .section { margin-bottom: 3.5rem; }
+  .section-header { display: flex; align-items: center; gap: 14px; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid #ede5dd; }
+  .section-num { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; color: white; flex-shrink: 0; }
+  .section-header h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+
+  /* Colors for sections */
+  .c-pink { background: linear-gradient(135deg, #e8366d, #c4245a); }
+  .c-emerald { background: linear-gradient(135deg, #059669, #047857); }
+  .c-blue { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+  .c-violet { background: linear-gradient(135deg, #7c3aed, #6d28d9); }
+  .c-amber { background: linear-gradient(135deg, #d97706, #b45309); }
+  .c-slate { background: linear-gradient(135deg, #475569, #334155); }
+
+  /* Cards */
+  .card { background: white; border-radius: 14px; padding: 20px 24px; border: 1px solid #ede5dd; margin-bottom: 12px; }
+  .card-accent { border-left: 4px solid #e8366d; }
+  .card-blue { border-left: 4px solid #3b82f6; }
+  .card-emerald { border-left: 4px solid #059669; }
+  .card-violet { border-left: 4px solid #7c3aed; }
+  .card-amber { border-left: 4px solid #d97706; }
+
+  .card h3 { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+  .card p { font-size: 14px; color: #666; }
+  .card strong { color: #1a1a1a; }
+
+  /* Flow arrows */
+  .flow { display: flex; flex-direction: column; gap: 0; margin: 1rem 0; }
+  .flow-step { display: flex; gap: 14px; }
+  .flow-line { display: flex; flex-direction: column; align-items: center; width: 28px; flex-shrink: 0; }
+  .flow-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .flow-connector { width: 2px; flex: 1; min-height: 20px; background: #ede5dd; }
+  .flow-content { flex: 1; padding-bottom: 16px; }
+  .flow-title { font-size: 14px; font-weight: 600; color: #1a1a1a; margin-bottom: 2px; }
+  .flow-desc { font-size: 13px; color: #666; line-height: 1.6; }
+
+  .dot-pink { background: #e8366d; }
+  .dot-emerald { background: #059669; }
+  .dot-blue { background: #3b82f6; }
+  .dot-violet { background: #7c3aed; }
+  .dot-amber { background: #d97706; }
+  .dot-gray { background: #9ca3af; }
+
+  /* Code blocks */
+  code { background: #f7f3ef; padding: 2px 7px; border-radius: 5px; font-size: 13px; font-family: 'SF Mono', Menlo, monospace; color: #c4245a; }
+  pre { background: #1a1a1a; color: #e2e8f0; padding: 16px 20px; border-radius: 12px; overflow-x: auto; font-size: 13px; line-height: 1.6; margin: 12px 0; font-family: 'SF Mono', Menlo, monospace; }
+  pre .comment { color: #64748b; }
+  pre .keyword { color: #f472b6; }
+  pre .string { color: #34d399; }
+  pre .num { color: #fbbf24; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 12px 0; }
+  th { text-align: left; padding: 8px 12px; background: #f7f3ef; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #999; border-bottom: 2px solid #ede5dd; }
+  td { padding: 8px 12px; border-bottom: 1px solid #f7f3ef; }
+  tr:hover td { background: #fdfcfb; }
+
+  /* Tags */
+  .tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
+  .tag-pink { background: #fff5f7; color: #e8366d; }
+  .tag-emerald { background: #ecfdf5; color: #059669; }
+  .tag-blue { background: #eff6ff; color: #2563eb; }
+  .tag-violet { background: #f5f3ff; color: #7c3aed; }
+  .tag-amber { background: #fffbeb; color: #d97706; }
+  .tag-gray { background: #f1f5f9; color: #64748b; }
+
+  /* Callout */
+  .callout { display: flex; gap: 12px; padding: 16px 20px; border-radius: 12px; margin: 16px 0; font-size: 14px; }
+  .callout-pink { background: #fff5f7; border: 1px solid #ffc2d1; }
+  .callout-blue { background: #eff6ff; border: 1px solid #bfdbfe; }
+  .callout-amber { background: #fffbeb; border: 1px solid #fde68a; }
+  .callout-icon { font-size: 18px; flex-shrink: 0; }
+
+  /* Diagram */
+  .diagram { background: #f7f3ef; border-radius: 14px; padding: 24px; margin: 16px 0; font-family: 'SF Mono', Menlo, monospace; font-size: 12px; line-height: 1.8; overflow-x: auto; white-space: pre; }
+
+  /* Info grid */
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+  @media (max-width: 640px) { .info-grid { grid-template-columns: 1fr; } }
+  .info-item { padding: 14px 16px; border-radius: 10px; background: white; border: 1px solid #ede5dd; }
+  .info-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #999; margin-bottom: 4px; }
+  .info-value { font-size: 15px; font-weight: 600; color: #1a1a1a; }
+  .info-value small { font-size: 12px; font-weight: 400; color: #999; }
+
+  /* Highlight answers */
+  .answer { background: linear-gradient(135deg, #fff5f7, #ffe0e6); border: 1px solid #ffc2d1; border-radius: 12px; padding: 16px 20px; margin: 16px 0; }
+  .answer-q { font-size: 13px; font-weight: 600; color: #c4245a; margin-bottom: 8px; display: flex; align-items: flex-start; gap: 8px; }
+  .answer-a { font-size: 14px; color: #1a1a1a; line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ═══ HEADER ═══ -->
+<div class="header">
+  <div class="header-badge">Internal Documentation</div>
+  <h1>Rosys Size Intelligence<br>Complete System Guide</h1>
+  <p>Everything about how the sizing assistant works — from customer input to AI recommendation to custom-fit pattern generation.</p>
+  <div class="meta">Last updated: April 2026 &middot; For Jovi &amp; team &middot; Live at <a href="https://platform-rosys.vercel.app" style="color:#e8366d">platform-rosys.vercel.app</a></div>
+</div>
+
+<!-- ═══ TOC ═══ -->
+<div class="toc">
+  <h2>Contents</h2>
+  <div class="toc-grid">
+    <a href="#flow"><div class="toc-num">1</div> Customer Flow (Step by Step)</a>
+    <a href="#measurements"><div class="toc-num">2</div> Measurements & Saved Profiles</a>
+    <a href="#deterministic"><div class="toc-num">3</div> Deterministic Size Matching</a>
+    <a href="#mlp"><div class="toc-num">4</div> MLP Body Profile Prediction</a>
+    <a href="#ai"><div class="toc-num">5</div> AI Recommendation Engine</a>
+    <a href="#height"><div class="toc-num">6</div> How Height Is Used</a>
+    <a href="#preferences"><div class="toc-num">7</div> Follow-up Preferences</a>
+    <a href="#customfit"><div class="toc-num">8</div> Custom-Fit Pattern Generation</a>
+    <a href="#infra"><div class="toc-num">9</div> Infrastructure & Databases</a>
+    <a href="#testing"><div class="toc-num">10</div> How to Test</a>
+  </div>
+</div>
+
+<!-- ═══ 1. FLOW ═══ -->
+<div class="section" id="flow">
+  <div class="section-header">
+    <div class="section-num c-pink">1</div>
+    <h2>Customer Flow (Step by Step)</h2>
+  </div>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-line"><div class="flow-dot dot-pink"></div><div class="flow-connector"></div></div>
+      <div class="flow-content">
+        <div class="flow-title">Customer taps "Sizing" in sidebar</div>
+        <div class="flow-desc">Sees a grid of all patterns that have size chart data. Only patterns with entries in <code>cs_pattern_size_charts</code> appear.</div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-line"><div class="flow-dot dot-pink"></div><div class="flow-connector"></div></div>
+      <div class="flow-content">
+        <div class="flow-title">Picks a pattern (e.g. "Alba Dress")</div>
+        <div class="flow-desc">Loads the sizing page. Server fetches: pattern name, full size chart (body + finished), and <strong>saved measurement profile</strong> from Supabase if logged in.</div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-line"><div class="flow-dot dot-pink"></div><div class="flow-connector"></div></div>
+      <div class="flow-content">
+        <div class="flow-title">Chooses entry method</div>
+        <div class="flow-desc">Two options: <span class="tag tag-emerald">Tape measure</span> (most accurate) or <span class="tag tag-amber">Photo upload</span> (beta — uses MediaPipe).</div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-line"><div class="flow-dot dot-blue"></div><div class="flow-connector"></div></div>
+      <div class="flow-content">
+        <div class="flow-title">Enters bust, waist, hip, height</div>
+        <div class="flow-desc">If they have a saved profile, fields are <strong>auto-filled</strong>. They can edit any value. Optionally clicks "Predict full body profile" to get shoulder, arm, leg predictions from the MLP model.</div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-line"><div class="flow-dot dot-emerald"></div><div class="flow-connector"></div></div>
+      <div class="flow-content">
+        <div class="flow-title">Taps "Analyze my fit"</div>
+        <div class="flow-desc">Measurements are <strong>auto-saved</strong> to Supabase <code>measurement_profiles</code> table. The analyzing screen shows a Perplexity-style timeline with live data surfacing.</div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-line"><div class="flow-dot dot-emerald"></div><div class="flow-connector"></div></div>
+      <div class="flow-content">
+        <div class="flow-title">Backend processes (all in one SSE stream)</div>
+        <div class="flow-desc">
+          <strong>Step 1:</strong> Deterministic size match (instant)<br>
+          <strong>Step 2:</strong> MLP body profile prediction (instant)<br>
+          <strong>Step 3:</strong> AI streams narrative recommendation (3-8 seconds)
+        </div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-line"><div class="flow-dot dot-violet"></div><div class="flow-connector"></div></div>
+      <div class="flow-content">
+        <div class="flow-title">Results appear as visual components</div>
+        <div class="flow-desc">Size badge, fit cards with progress bars, narrative cards (why this size, adjustments, garment notes), expandable data panels.</div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-line"><div class="flow-dot dot-amber"></div><div class="flow-connector"></div></div>
+      <div class="flow-content">
+        <div class="flow-title">Optional: Fine-tune preferences</div>
+        <div class="flow-desc">Customer can set fit preferences (fitted/loose, more room at bust, stretch fabric, etc). The AI re-analyzes with a new prompt that includes the <strong>previous recommendation</strong> + preferences. Page blurs, modal shows, then scrolls to updated results.</div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-line"><div class="flow-dot dot-emerald"></div><div class="flow-connector"></div></div>
+      <div class="flow-content">
+        <div class="flow-title">Lock size → Download</div>
+        <div class="flow-desc">Customer locks their size. Downloads single-size PDF (A0/A4/US Letter) or custom-fit pattern (scaled to their exact body).</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 2. MEASUREMENTS ═══ -->
+<div class="section" id="measurements">
+  <div class="section-header">
+    <div class="section-num c-blue">2</div>
+    <h2>Measurements & Saved Profiles</h2>
+  </div>
+
+  <div class="card card-blue">
+    <h3>Where are profiles stored?</h3>
+    <p>
+      <strong>Supabase project:</strong> <code>lahzrlyhojyfadjasdrc</code><br>
+      <strong>Table:</strong> <code>measurement_profiles</code><br>
+      <strong>Dashboard:</strong> <a href="https://supabase.com/dashboard/project/lahzrlyhojyfadjasdrc/editor" style="color:#3b82f6">supabase.com/dashboard/project/lahzrlyhojyfadjasdrc</a>
+    </p>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>Column</th><th>Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>id</code></td><td>uuid</td><td>Primary key</td></tr>
+      <tr><td><code>user_id</code></td><td>uuid</td><td>FK to auth.users</td></tr>
+      <tr><td><code>name</code></td><td>text</td><td>"Sizing Assistant" or custom name</td></tr>
+      <tr><td><code>bust_cm</code></td><td>numeric</td><td>Bust circumference</td></tr>
+      <tr><td><code>waist_cm</code></td><td>numeric</td><td>Waist circumference</td></tr>
+      <tr><td><code>hip_cm</code></td><td>numeric</td><td>Hip circumference</td></tr>
+      <tr><td><code>height_cm</code></td><td>numeric</td><td>Height (nullable)</td></tr>
+      <tr><td><code>shoulder_width_cm</code></td><td>numeric</td><td>From MLP or manual</td></tr>
+      <tr><td><code>arm_length_cm</code></td><td>numeric</td><td>From MLP or manual</td></tr>
+      <tr><td><code>inseam_cm</code></td><td>numeric</td><td>From MLP or manual</td></tr>
+      <tr><td><code>source</code></td><td>text</td><td>'manual', 'photo', or 'neckstimate'</td></tr>
+      <tr><td><code>updated_at</code></td><td>timestamp</td><td>Last modified</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-blue">
+    <div class="callout-icon">💡</div>
+    <div>
+      <strong>Auto-save logic:</strong> When the customer clicks "Analyze my fit", the page calls <code>POST /profile/measurements?/save</code> which upserts into <code>measurement_profiles</code>. Next time they visit ANY sizing page, the server loader reads their latest profile and pre-fills the form.
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Flow: New customer vs returning customer</h3>
+    <p><strong>New customer:</strong> Empty fields → enters measurements → clicks Analyze → profile saved for next time.</p>
+    <p><strong>Returning customer:</strong> Fields pre-filled from saved profile → can edit → clicks Analyze → profile updated.</p>
+  </div>
+</div>
+
+<!-- ═══ 3. DETERMINISTIC ═══ -->
+<div class="section" id="deterministic">
+  <div class="section-header">
+    <div class="section-num c-emerald">3</div>
+    <h2>Deterministic Size Matching</h2>
+  </div>
+
+  <div class="card card-emerald">
+    <h3>File: <code>src/lib/size-matching.server.ts</code></h3>
+    <p>Pure math — no AI involved. Runs instantly. Compares customer measurements against every size in the chart.</p>
+  </div>
+
+  <p style="margin: 16px 0; font-size: 14px; color: #666;">The scoring formula:</p>
+  <pre><span class="comment">// Weighted sum — bust matters most for tops/dresses</span>
+score = bustDiff × <span class="num">1.5</span> + waistDiff × <span class="num">1.0</span> + hipDiff × <span class="num">1.2</span>
+
+<span class="comment">// Lowest score = best match</span>
+<span class="comment">// If top 2 scores differ by less than 4 → "between sizes"</span></pre>
+
+  <div class="callout callout-amber">
+    <div class="callout-icon">⚠️</div>
+    <div>
+      <strong>Body chart vs finished chart:</strong> Some patterns (like Alba Dress) have <strong>no body chart</strong> — only finished garment measurements. In that case, the matcher compares against finished measurements and <strong>penalizes negative ease</strong> (garment smaller than body) with a 2.5x multiplier. You can't wear a dress 10cm smaller than your bust!
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Fit categories</h3>
+    <table>
+      <thead><tr><th>Category</th><th>Diff (chart - body)</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag tag-amber">tight</span></td><td>&lt; -2cm</td><td>Garment is smaller than body</td></tr>
+        <tr><td><span class="tag tag-emerald">exact</span></td><td>-2 to +2cm</td><td>Perfect match</td></tr>
+        <tr><td><span class="tag tag-blue">comfortable</span></td><td>+2 to +6cm</td><td>Nice ease</td></tr>
+        <tr><td><span class="tag tag-violet">loose</span></td><td>&gt; +6cm</td><td>Very roomy</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Ease calculation</h3>
+    <p><strong>Ease = finished garment measurement - body measurement</strong></p>
+    <p>Example: If your bust is 90cm and the finished dress bust at Size M is 92cm → <strong>ease = +2cm</strong> (snug but comfortable for woven fabric).</p>
+    <p>If the pattern has both body AND finished charts: ease = finished - body chart value (the designed-in room).</p>
+  </div>
+</div>
+
+<!-- ═══ 4. MLP ═══ -->
+<div class="section" id="mlp">
+  <div class="section-header">
+    <div class="section-num c-violet">4</div>
+    <h2>MLP Body Profile Prediction</h2>
+  </div>
+
+  <div class="card card-violet">
+    <h3>File: <code>src/lib/body-profile-predictor.server.ts</code></h3>
+    <p>A neural network that predicts <strong>10 body measurements from just 4 inputs</strong>. Pure TypeScript — no Python needed at runtime.</p>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-item">
+      <div class="info-label">Training data</div>
+      <div class="info-value">59,000 subjects <small>NHANES + BodyM + Kaggle + synthetic</small></div>
+    </div>
+    <div class="info-item">
+      <div class="info-label">Model file</div>
+      <div class="info-value">mlp-weights.json <small>25 MB, loaded once</small></div>
+    </div>
+    <div class="info-item">
+      <div class="info-label">Architecture</div>
+      <div class="info-value">4-layer MLP <small>GELU + BatchNorm</small></div>
+    </div>
+    <div class="info-item">
+      <div class="info-label">Trained with</div>
+      <div class="info-value">PyTorch <small>scripts/train-body-measurement.py</small></div>
+    </div>
+  </div>
+
+  <p style="margin: 16px 0; font-size: 14px; color: #666;">Network architecture:</p>
+  <pre><span class="keyword">Input:</span>  [height, bust, waist, hip]  →  <span class="num">4</span> values
+
+<span class="keyword">Layer 0:</span>  Linear(<span class="num">4</span> → <span class="num">512</span>) → GELU → BatchNorm
+<span class="keyword">Layer 4:</span>  Linear(<span class="num">512</span> → <span class="num">1024</span>) → GELU → BatchNorm
+<span class="keyword">Layer 8:</span>  Linear(<span class="num">1024</span> → <span class="num">512</span>) → GELU → BatchNorm
+<span class="keyword">Layer 12:</span> Linear(<span class="num">512</span> → <span class="num">256</span>) → GELU
+<span class="keyword">Layer 14:</span> Linear(<span class="num">256</span> → <span class="num">10</span>) → denormalize
+
+<span class="keyword">Output:</span> [bust, waist, hip, height, weight, arm_length,
+         shoulder, neck, leg_length, arm_circ]  →  <span class="num">10</span> values</pre>
+
+  <div class="card">
+    <h3>What the customer sees</h3>
+    <p>After entering bust/waist/hip/height, they can click <strong>"Predict full body profile"</strong> → this calls <code>POST /api/ai/body-profile</code> → returns shoulder, arm length, leg length. These appear as <strong>editable fields</strong> — the customer can override any prediction before analyzing.</p>
+    <p>If they don't click predict, the MLP still runs server-side during the streaming analysis.</p>
+  </div>
+</div>
+
+<!-- ═══ 5. AI ═══ -->
+<div class="section" id="ai">
+  <div class="section-header">
+    <div class="section-num c-pink">5</div>
+    <h2>AI Recommendation Engine</h2>
+  </div>
+
+  <div class="card card-accent">
+    <h3>File: <code>src/routes/api/ai/size-intelligence/stream/+server.ts</code></h3>
+    <p>Streams the recommendation via Server-Sent Events. The AI receives <strong>everything</strong> we know about the pattern.</p>
+  </div>
+
+  <p style="margin: 16px 0; font-size: 14px; font-weight: 600;">What the AI receives in its prompt:</p>
+
+  <table>
+    <thead><tr><th>Data</th><th>Source</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>Customer bust/waist/hip/height</td><td>User input</td><td>The measurements to match</td></tr>
+      <tr><td>Deterministic match result</td><td><code>size-matching.server.ts</code></td><td>Pre-computed best size + score</td></tr>
+      <tr><td>Body size chart (all sizes)</td><td><code>cs_pattern_size_charts</code></td><td>Body measurements per size</td></tr>
+      <tr><td>Finished garment chart</td><td><code>cs_pattern_size_charts</code></td><td>Actual dress dimensions per size</td></tr>
+      <tr><td>Ease values</td><td>Calculated: finished - body</td><td>How much room the garment gives</td></tr>
+      <tr><td>MLP body profile</td><td><code>body-profile-predictor</code></td><td>Predicted shoulder, arm, leg, weight</td></tr>
+      <tr><td>Product identity</td><td><code>cs_pattern_embeddings</code></td><td>"Sleeveless dress, square neck"</td></tr>
+      <tr><td>Fabric & construction</td><td><code>cs_pattern_embeddings</code></td><td>Linen, viscose, darts, zipper, etc.</td></tr>
+      <tr><td>DXF piece dimensions</td><td><code>cs_pattern_embeddings</code></td><td>Actual pattern piece sizes in mm</td></tr>
+      <tr><td>Extended measurements</td><td><code>cs_pattern_embeddings</code></td><td>Shoulder-to-shoulder, sweep, slit per size</td></tr>
+      <tr><td>Finished garment images</td><td>Supabase Storage (if accessible)</td><td>AI can SEE the dress silhouette</td></tr>
+    </tbody>
+  </table>
+
+  <div class="card">
+    <h3>Provider priority chain</h3>
+    <p>
+      <span class="tag tag-pink">1. Anthropic Claude Sonnet 4.6</span> Primary — streaming via <code>api.anthropic.com</code><br>
+      <span class="tag tag-blue">2. Ollama Gemma 4 E4B</span> Local fallback — <code>localhost:11434</code><br>
+      <span class="tag tag-amber">3. Google Gemini 3 Flash Preview</span> Cloud fallback — <code>generativelanguage.googleapis.com</code>
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>SSE events sent to the browser</h3>
+    <table>
+      <thead><tr><th>Event</th><th>When</th><th>Contains</th></tr></thead>
+      <tbody>
+        <tr><td><code>deterministic</code></td><td>Instant (~50ms)</td><td>Size match, fit badges, body profile, chart data</td></tr>
+        <tr><td><code>chunk</code></td><td>Streaming (3-8s)</td><td>AI narrative text tokens</td></tr>
+        <tr><td><code>done</code></td><td>End</td><td>Stream complete signal</td></tr>
+        <tr><td><code>error</code></td><td>On failure</td><td>Error message</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ 6. HEIGHT ═══ -->
+<div class="section" id="height">
+  <div class="section-header">
+    <div class="section-num c-amber">6</div>
+    <h2>How Height Is Used (Jovi's Question!)</h2>
+  </div>
+
+  <div class="answer">
+    <div class="answer-q">❓ "Can we see in the back end how it currently calculates taking into account the height of the customer?"</div>
+    <div class="answer-a">
+      <strong>Yes!</strong> Height is used in <strong>three places</strong>:
+    </div>
+  </div>
+
+  <div class="card card-emerald">
+    <h3>1. MLP Body Profile Prediction</h3>
+    <p><strong>File:</strong> <code>src/lib/body-profile-predictor.server.ts</code>, line 80</p>
+    <p>Height is the <strong>first input</strong> to the neural network: <code>[height, bust, waist, hip]</code>. The MLP uses height to predict proportional measurements — a taller person will have longer arms, longer legs, wider shoulders. The model learned these proportions from 59,000 real bodies.</p>
+    <pre><span class="comment">// Input order: [height, bust, waist, hip]</span>
+<span class="keyword">const</span> input = [height_cm, bust_cm, waist_cm, hip_cm];
+
+<span class="comment">// Forward pass through 4-layer MLP...</span>
+<span class="comment">// Output: shoulder, arm_length, leg_length, etc.</span></pre>
+  </div>
+
+  <div class="card card-blue">
+    <h3>2. AI Prompt Context</h3>
+    <p><strong>File:</strong> <code>src/routes/api/ai/size-intelligence/stream/+server.ts</code>, buildPrompt()</p>
+    <p>Height is included in the prompt sent to Claude. The AI uses it to recommend <strong>length adjustments</strong>. Patterns are typically designed for ~168cm. The AI says things like "At 175cm, you may want to add 2cm to the bodice length" or "At 160cm, consider shortening the skirt by 3cm."</p>
+    <pre><span class="string">`CUSTOMER: bust 90cm, waist 60cm, hip 90cm, height 169cm`</span>
+
+<span class="comment">// AI system prompt says:</span>
+<span class="string">"Heights are designed for ~168cm. Adjust lengths proportionally
+ for taller/shorter."</span></pre>
+  </div>
+
+  <div class="card card-violet">
+    <h3>3. Finished Garment Length Comparison</h3>
+    <p>The finished chart includes <code>full_length_cm</code> per size. The AI compares this against the customer's height to recommend specific adjustments. Example: "Size M is 137cm long — at your 169cm, this will hit well below the knee."</p>
+  </div>
+
+  <div class="callout callout-pink">
+    <div class="callout-icon">📌</div>
+    <div>
+      <strong>Height does NOT affect the size recommendation itself</strong> — bust/waist/hip determine the size. Height affects <strong>length adjustments</strong> and <strong>body profile predictions</strong> only. This is correct — a 160cm person and a 180cm person with the same bust/waist/hip should wear the same size, just with different length alterations.
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 7. PREFERENCES ═══ -->
+<div class="section" id="preferences">
+  <div class="section-header">
+    <div class="section-num c-pink">7</div>
+    <h2>Follow-up Preferences</h2>
+  </div>
+
+  <div class="card">
+    <h3>What the customer can choose</h3>
+    <table>
+      <thead><tr><th>Category</th><th>Options</th></tr></thead>
+      <tbody>
+        <tr><td>Overall fit</td><td>Fitted & close · Comfortable ease · Loose & relaxed</td></tr>
+        <tr><td>Bust</td><td>More room · As fitted as possible</td></tr>
+        <tr><td>Waist</td><td>More room · Defined waist</td></tr>
+        <tr><td>Hip</td><td>More room · Slim through hip</td></tr>
+        <tr><td>Length</td><td>Shorter · As designed · Longer</td></tr>
+        <tr><td>Fabric</td><td>Woven (no stretch) · Light stretch · Stretch knit</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card card-accent">
+    <h3>How re-analysis works</h3>
+    <p>A <strong>new API call</strong> is made to the same streaming endpoint, but with two extra fields:</p>
+    <p><code>preferences</code> — the customer's selections</p>
+    <p><code>previous_recommendation</code> — the FULL text of the initial AI response</p>
+    <p>The AI uses a different system prompt (<code>FOLLOWUP_SYSTEM_PROMPT</code>) that tells it to focus on what changed. It may suggest a different size. The size badge, fit cards, and all components update automatically.</p>
+  </div>
+
+  <div class="callout callout-blue">
+    <div class="callout-icon">🔄</div>
+    <div>During re-analysis: the entire page blurs, a modal popup appears with a shimmer progress bar, and when done the page scrolls back to the top showing updated results.</div>
+  </div>
+</div>
+
+<!-- ═══ 8. CUSTOM FIT ═══ -->
+<div class="section" id="customfit">
+  <div class="section-header">
+    <div class="section-num c-violet">8</div>
+    <h2>Custom-Fit Pattern Generation</h2>
+  </div>
+
+  <div class="card card-violet">
+    <h3>This is the Beta feature!</h3>
+    <p>After locking a size, the customer can request a <strong>custom-fit pattern</strong> — scaled to their exact body measurements. Available in <strong>A0, A4, and US Letter PDF</strong> formats.</p>
+  </div>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-line"><div class="flow-dot dot-violet"></div><div class="flow-connector"></div></div>
+      <div class="flow-content">
+        <div class="flow-title">Calculate grading</div>
+        <div class="flow-desc"><code>pattern-grading.server.ts</code> — finds closest standard size, calculates ease, computes scale factors (width + height). Warns if adjustment exceeds 15% or 25%.</div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-line"><div class="flow-dot dot-violet"></div><div class="flow-connector"></div></div>
+      <div class="flow-content">
+        <div class="flow-title">Show preview</div>
+        <div class="flow-desc">Customer sees: original pattern measurements vs their custom measurements, the delta (e.g. +2.3cm bust), and a confidence badge (high/medium/low).</div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-line"><div class="flow-dot dot-violet"></div><div class="flow-connector"></div></div>
+      <div class="flow-content">
+        <div class="flow-title">Generate scaled PDFs</div>
+        <div class="flow-desc"><code>pattern-files.server.ts</code> — downloads original A0/A4/US Letter PDFs from Supabase Storage, uses <code>pdf-lib</code> to scale every page with <code>page.scaleContent(scaleW, scaleH)</code>.</div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-line"><div class="flow-dot dot-violet"></div><div class="flow-connector"></div></div>
+      <div class="flow-content">
+        <div class="flow-title">Download</div>
+        <div class="flow-desc">Customer downloads A0, A4, or US Letter — each individually. The PDF is proportionally scaled to their body + ease.</div>
+      </div>
+    </div>
+  </div>
+
+  <pre><span class="comment">// Scale formula</span>
+scale_width  = custom_bust_finished / sample_bust_finished
+scale_height = custom_length / sample_length  <span class="comment">(or √scale_width)</span>
+
+<span class="comment">// Example: bust 90cm + 4cm ease = 94cm custom finished</span>
+<span class="comment">// Sample size S finished bust = 88cm</span>
+<span class="comment">// scale_width = 94 / 88 = 1.068 → 6.8% wider</span></pre>
+</div>
+
+<!-- ═══ 9. INFRASTRUCTURE ═══ -->
+<div class="section" id="infra">
+  <div class="section-header">
+    <div class="section-num c-slate">9</div>
+    <h2>Infrastructure & Databases</h2>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-item">
+      <div class="info-label">Hosting</div>
+      <div class="info-value">Vercel <small>platform-rosys.vercel.app</small></div>
+    </div>
+    <div class="info-item">
+      <div class="info-label">Framework</div>
+      <div class="info-value">SvelteKit 5 <small>+ Tailwind CSS 4</small></div>
+    </div>
+    <div class="info-item">
+      <div class="info-label">Supabase (auth + profiles)</div>
+      <div class="info-value">lahzrlyhojyfadjasdrc <small>.supabase.co</small></div>
+    </div>
+    <div class="info-item">
+      <div class="info-label">Railway PostgreSQL</div>
+      <div class="info-value">Pattern catalog <small>size charts, embeddings</small></div>
+    </div>
+    <div class="info-item">
+      <div class="info-label">Supabase Storage</div>
+      <div class="info-value">pattern-files bucket <small>PDFs, DXFs, images</small></div>
+    </div>
+    <div class="info-item">
+      <div class="info-label">AI Provider</div>
+      <div class="info-value">Anthropic <small>Claude Sonnet 4.6</small></div>
+    </div>
+    <div class="info-item">
+      <div class="info-label">GitHub</div>
+      <div class="info-value">MichaelSRLY/rosys-platform</div>
+    </div>
+    <div class="info-item">
+      <div class="info-label">MLP Weights</div>
+      <div class="info-value">25 MB JSON <small>src/lib/mlp-weights.json</small></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Database tables used by sizing</h3>
+    <table>
+      <thead><tr><th>Table</th><th>Database</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>cs_pattern_size_charts</code></td><td>Railway PG</td><td>Body + finished measurements per size per pattern</td></tr>
+        <tr><td><code>cs_pattern_catalog</code></td><td>Railway PG</td><td>Pattern slug → name (130 patterns)</td></tr>
+        <tr><td><code>cs_pattern_embeddings</code></td><td>Railway PG</td><td>DXF pieces, instructions, images, size chart text</td></tr>
+        <tr><td><code>measurement_profiles</code></td><td>Supabase</td><td>Saved user measurements</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ 10. TESTING ═══ -->
+<div class="section" id="testing">
+  <div class="section-header">
+    <div class="section-num c-emerald">10</div>
+    <h2>How to Test</h2>
+  </div>
+
+  <div class="card card-emerald">
+    <h3>Test measurements to try</h3>
+    <table>
+      <thead><tr><th>Body Type</th><th>Bust</th><th>Waist</th><th>Hip</th><th>Height</th><th>Expected</th></tr></thead>
+      <tbody>
+        <tr><td>Standard medium</td><td>88</td><td>72</td><td>96</td><td>168</td><td>Typically S or M</td></tr>
+        <tr><td>Hourglass</td><td>90</td><td>60</td><td>90</td><td>169</td><td>M for most dresses (bust-driven)</td></tr>
+        <tr><td>Plus size</td><td>110</td><td>96</td><td>116</td><td>165</td><td>XL or 2XL</td></tr>
+        <tr><td>Petite</td><td>80</td><td>64</td><td>88</td><td>155</td><td>XXS or XS + shorten</td></tr>
+        <tr><td>Tall</td><td>92</td><td>74</td><td>98</td><td>180</td><td>M or L + length adjustment</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Testing checklist</h3>
+    <div style="font-size: 14px; line-height: 2;">
+      ☐ Go to <a href="https://platform-rosys.vercel.app/sizing" style="color:#e8366d">platform-rosys.vercel.app/sizing</a><br>
+      ☐ Pick any pattern (e.g. Alba Dress)<br>
+      ☐ Choose "Measure yourself"<br>
+      ☐ Enter test measurements (e.g. 90/60/90/169)<br>
+      ☐ Click "Predict full body profile" — verify shoulder/arm/leg appear<br>
+      ☐ Edit one predicted value — verify badge changes to "Using your custom values"<br>
+      ☐ Click "Analyze my fit" — verify 3-step timeline shows data<br>
+      ☐ Verify results: size badge, fit cards, narrative cards<br>
+      ☐ Open "Finished garment measurements" — verify table with highlighted size<br>
+      ☐ Open "Body profile" — verify predicted values<br>
+      ☐ Click "Fine-tune" → select some preferences → click "Update"<br>
+      ☐ Verify: blur overlay, modal, then scroll to top with updated results<br>
+      ☐ Lock size → verify download buttons appear (A0/A4/US Letter)<br>
+      ☐ If pattern has DXF: verify custom-fit section with A0/A4/Letter downloads<br>
+      ☐ Go back, pick a different pattern → verify saved measurements pre-fill<br>
+    </div>
+  </div>
+
+  <div class="callout callout-amber">
+    <div class="callout-icon">🔑</div>
+    <div>
+      <strong>You must be logged in</strong> to use the sizing system. All API endpoints require authentication. The measurement profile save also requires a logged-in user.
+    </div>
+  </div>
+</div>
+
+<!-- Footer -->
+<div style="text-align: center; padding-top: 3rem; border-top: 1px solid #ede5dd; color: #999; font-size: 12px;">
+  <p>Rosys Patterns — Internal Documentation</p>
+  <p>Built with SvelteKit 5 &middot; Claude Sonnet 4.6 &middot; MLP trained on 59K subjects</p>
+</div>
+
+</div>
+</body>
+</html>

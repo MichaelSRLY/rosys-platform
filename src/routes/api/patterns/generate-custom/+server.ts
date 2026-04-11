@@ -43,7 +43,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			pattern_slug,
 			patternName,
 			{ width: grading.scale_width, height: grading.scale_height },
-			customLabel
+			customLabel,
+			grading.target_size // extract this size first, then scale
 		);
 
 		if (files.length === 0) {
