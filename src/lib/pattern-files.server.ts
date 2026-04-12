@@ -6,7 +6,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { env } from '$env/dynamic/private';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
-import { PDFDocument } from 'pdf-lib';
 
 function getAdmin() {
 	return createClient(PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_KEY || '');
@@ -83,22 +82,40 @@ async function downloadFile(path: string): Promise<Uint8Array> {
 }
 
 /**
- * Scale a PDF by applying a transformation to all pages.
- * Uses pdf-lib to modify the page content stream scaling.
+ * Scale a PDF using Python/pikepdf for precise control.
+ * Wraps pattern content in a scale transform while preserving
+ * the test square (2x2cm calibration) at true print size.
+ * Page dimensions (A0, A4, etc.) are unchanged.
  */
 async function scalePdf(
 	pdfBytes: Uint8Array,
 	scale: ScaleFactors,
 ): Promise<Uint8Array> {
-	const doc = await PDFDocument.load(pdfBytes);
-	const pages = doc.getPages();
+	const { exec } = await import('child_process');
+	const { promisify } = await import('util');
+	const { writeFile: fsWrite, readFile: fsRead, unlink: fsUnlink } = await import('fs/promises');
+	const { tmpdir } = await import('os');
+	const { join } = await import('path');
+	const { randomUUID } = await import('crypto');
+	const execAsync = promisify(exec);
 
-	for (const page of pages) {
-		// Scale content only — keep the original paper size (A0, A4, etc.)
-		page.scaleContent(scale.width, scale.height);
+	const tmpId = randomUUID();
+	const inputPath = join(tmpdir(), `${tmpId}-scale-in.pdf`);
+	const outputPath = join(tmpdir(), `${tmpId}-scale-out.pdf`);
+
+	try {
+		await fsWrite(inputPath, Buffer.from(pdfBytes));
+		const scriptPath = join(process.cwd(), 'scripts', 'scale-pattern.py');
+		await execAsync(
+			`python3 "${scriptPath}" "${inputPath}" ${scale.width} ${scale.height} "${outputPath}"`,
+			{ timeout: 30000 }
+		);
+		const outputBuffer = await fsRead(outputPath);
+		return new Uint8Array(outputBuffer);
+	} finally {
+		await fsUnlink(inputPath).catch(() => {});
+		await fsUnlink(outputPath).catch(() => {});
 	}
-
-	return await doc.save();
 }
 
 /**
