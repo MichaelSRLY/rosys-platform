@@ -94,10 +94,7 @@ async function scalePdf(
 	const pages = doc.getPages();
 
 	for (const page of pages) {
-		const { width, height } = page.getSize();
-		const newWidth = width * scale.width;
-		const newHeight = height * scale.height;
-		page.setSize(newWidth, newHeight);
+		// Scale content only — keep the original paper size (A0, A4, etc.)
 		page.scaleContent(scale.width, scale.height);
 	}
 

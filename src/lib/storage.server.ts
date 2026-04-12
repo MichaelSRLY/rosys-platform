@@ -18,10 +18,11 @@ function getAdmin() {
  * Generate a signed URL for a file in the pattern-files bucket.
  * Returns null if file doesn't exist or signing fails.
  */
-export async function signPatternUrl(path: string, expiresIn = 3600): Promise<string | null> {
+export async function signPatternUrl(path: string, expiresIn = 3600, downloadFilename?: string): Promise<string | null> {
+	const options = downloadFilename ? { download: downloadFilename } : {};
 	const { data, error } = await getAdmin().storage
 		.from('pattern-files')
-		.createSignedUrl(path, expiresIn);
+		.createSignedUrl(path, expiresIn, options);
 	return error ? null : data.signedUrl;
 }
 

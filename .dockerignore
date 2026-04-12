@@ -1,0 +1,10 @@
+node_modules
+.svelte-kit
+build
+.vercel
+.env
+.env.*
+*.md
+!README.md
+Context/
+test-*

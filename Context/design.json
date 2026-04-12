@@ -1,0 +1,281 @@
+{
+  "$schema": "https://rosyspatterns.com/design/v1",
+  "name": "Rosys Design System",
+  "version": "1.0.0",
+  "description": "Unified design language for Rosys Patterns — a sewing pattern testing platform and community. Warm, editorial, Apple-inspired with a signature pink accent.",
+  "references": [
+    {
+      "name": "pretext",
+      "url": "https://github.com/chenglou/pretext",
+      "role": "Typography and text layout principles — line joining, smart paragraph detection, content-aware spacing, and rich text formatting from raw/unstructured source text."
+    }
+  ],
+
+  "philosophy": {
+    "summary": "Quietly elegant, modern, effortless — like the garments our users sew.",
+    "principles": [
+      "Content-first: typography and whitespace do the heavy lifting, not decoration.",
+      "Warm, not sterile: warm neutrals and a signature rose accent replace cold grays and blues.",
+      "Apple-grade polish: Inter typography, system font fallbacks, tight letter-spacing, glass effects.",
+      "Smart defaults: the UI should parse, detect, and beautifully format whatever data it receives.",
+      "Responsive by nature: every component works from 320px mobile to 1600px desktop without breakage.",
+      "Subtle motion: transitions at 200ms, hover lifts at 0.07 opacity shadow, scale nudges at 0.97."
+    ]
+  },
+
+  "palette": {
+    "brand": {
+      "rosys-50":  "#fff5f7",
+      "rosys-100": "#ffe0e8",
+      "rosys-200": "#ffc2d4",
+      "rosys-300": "#ff94b3",
+      "rosys-400": "#ff5c8a",
+      "rosys-500": "#e8366d",
+      "rosys-600": "#c91d55",
+      "rosys-700": "#a81445",
+      "rosys-800": "#8b1239",
+      "rosys-900": "#6e1a3a"
+    },
+    "warm": {
+      "warm-50":  "#fdfcfb",
+      "warm-100": "#f7f4f0",
+      "warm-200": "#ede8e1",
+      "warm-300": "#ddd5ca",
+      "warm-400": "#c6b8a3",
+      "warm-500": "#a98d73"
+    },
+    "semantic": {
+      "rosys-bg":           "var(--color-warm-50)",
+      "rosys-bg-alt":       "var(--color-warm-100)",
+      "rosys-fg":           "#1a1a1a",
+      "rosys-fg-secondary": "#3d3d3d",
+      "rosys-fg-muted":     "#666666",
+      "rosys-fg-faint":     "#999999",
+      "rosys-accent":       "var(--color-rosys-500)",
+      "rosys-accent-hover": "var(--color-rosys-600)",
+      "rosys-border":       "var(--color-warm-200)",
+      "rosys-card":         "#ffffff",
+      "rosys-success":      "#34c759",
+      "rosys-tan":          "#c6b8a3"
+    }
+  },
+
+  "typography": {
+    "fontStack": {
+      "heading": "'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif",
+      "body":    "'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+      "ui":      "'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+      "mono":    "'SF Mono', 'Fira Code', 'Cascadia Code', monospace"
+    },
+    "googleFontsImport": "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap",
+    "headings": {
+      "letterSpacing": "-0.025em",
+      "fontWeight": "700",
+      "color": "rosys-fg"
+    },
+    "body": {
+      "fontSize": "14px / 15px (md+)",
+      "lineHeight": "1.75–1.8",
+      "color": "rosys-fg-secondary"
+    },
+    "ui": {
+      "labels": "11px uppercase tracking-[0.1em] font-semibold rosys-fg-faint",
+      "badges": "10–12px font-medium rounded-lg",
+      "counters": "12px tabular-nums rosys-fg-faint"
+    },
+    "pretext_influence": {
+      "line_joining": "Continuation lines from PDF/raw extraction are joined when: previous line doesn't end with punctuation, current line starts lowercase, and neither line is a header.",
+      "smart_parsing": "Raw text is classified into 7 content types: text, numbered, bullet, heading, table-row, dash-item, note — each rendered with distinct visual treatment.",
+      "key_value_detection": "Lines matching 'Label: value' or 'Label — description' get bold labels automatically.",
+      "table_detection": "Size chart rows (Size XXS XS S M L XL) and tab-separated data auto-render as formatted tables.",
+      "orphan_filtering": "Standalone number-only lines (artifacts from PDF column extraction) are silently dropped."
+    }
+  },
+
+  "components": {
+    "rosys-card": {
+      "background": "#ffffff",
+      "borderRadius": "1rem",
+      "border": "1px solid color-mix(in srgb, var(--color-warm-200) 60%, transparent)",
+      "boxShadow": "0 1px 3px rgba(0,0,0,0.04)",
+      "hoverShadow": "0 4px 20px rgba(0,0,0,0.07)",
+      "transition": "box-shadow 0.2s"
+    },
+    "rosys-btn-primary": {
+      "background": "linear-gradient(135deg, var(--color-rosys-500), var(--color-rosys-600))",
+      "hoverBackground": "linear-gradient(135deg, var(--color-rosys-600), var(--color-rosys-700))",
+      "color": "#ffffff",
+      "borderRadius": "0.75rem",
+      "padding": "0.5rem 1.25rem",
+      "fontSize": "13px",
+      "fontWeight": "600",
+      "boxShadow": "0 2px 8px rgba(232, 54, 109, 0.25)",
+      "hoverShadow": "0 4px 16px rgba(232, 54, 109, 0.35)",
+      "activeScale": "0.97",
+      "transition": "all 0.2s"
+    },
+    "rosys-section-icon": {
+      "width": "2.5rem",
+      "height": "2.5rem",
+      "borderRadius": "0.75rem",
+      "background": "linear-gradient(135deg, var(--color-rosys-500), var(--color-rosys-600))",
+      "color": "#ffffff",
+      "display": "flex items-center justify-center"
+    },
+    "glass": {
+      "background": "rgba(255, 255, 255, 0.85)",
+      "backdropFilter": "blur(12px) saturate(180%)",
+      "WebkitBackdropFilter": "blur(12px) saturate(180%)"
+    },
+    "input-field": {
+      "background": "var(--color-warm-50)",
+      "border": "1px solid color-mix(in srgb, var(--color-warm-200) 50%, transparent)",
+      "borderRadius": "0.75rem",
+      "focusRing": "ring-2 ring-rosys-400/25 border-rosys-300",
+      "fontSize": "14px",
+      "padding": "0.625rem 0.875rem"
+    },
+    "numbered-badge": {
+      "size": "1.5rem",
+      "borderRadius": "0.5rem",
+      "background": "var(--color-rosys-50)",
+      "color": "var(--color-rosys-600)",
+      "fontSize": "11px",
+      "fontWeight": "700"
+    },
+    "dash-item-card": {
+      "description": "For 'Label — description' content patterns (fabric suggestions, materials, etc.)",
+      "background": "#ffffff",
+      "border": "1px solid color-mix(in srgb, var(--color-warm-200) 25%, transparent)",
+      "borderRadius": "0.75rem",
+      "padding": "0.5rem 1rem",
+      "dotColor": "var(--color-rosys-300)",
+      "labelWeight": "500",
+      "labelColor": "rosys-fg",
+      "descColor": "rosys-fg-secondary"
+    },
+    "note-callout": {
+      "background": "rgba(251, 191, 36, 0.08)",
+      "border": "1px solid rgba(251, 191, 36, 0.2)",
+      "borderRadius": "0.75rem",
+      "iconColor": "amber-600",
+      "labelStyle": "11px font-bold uppercase tracking-wider amber-700"
+    },
+    "progress-bar": {
+      "height": "3px",
+      "trackColor": "var(--color-warm-100)",
+      "fillGradient": "linear-gradient(to right, var(--color-rosys-400), var(--color-rosys-500))",
+      "borderRadius": "9999px",
+      "transition": "width 0.5s ease-out"
+    },
+    "progress-dots": {
+      "gap": "3px",
+      "dotSize": "6px",
+      "activeDot": { "width": "20px", "color": "var(--color-rosys-500)" },
+      "visitedDot": { "color": "var(--color-rosys-300)" },
+      "futureDot": { "color": "color-mix(in srgb, var(--color-rosys-200) 60%, transparent)" }
+    }
+  },
+
+  "layout": {
+    "maxContentWidth": "1400–1600px",
+    "adminSidebar": {
+      "width": "14rem (w-56)",
+      "borderRadius": "1rem (rounded-2xl)",
+      "border": "1px solid var(--color-rosys-100)",
+      "overflow": "hidden"
+    },
+    "pageContainer": {
+      "padding": "px-4 sm:px-6 lg:pl-[19.5rem] lg:pr-6 py-5 lg:py-8",
+      "maxWidth": "1600px"
+    },
+    "contentColumn": {
+      "maxWidth": "48rem (max-w-3xl)",
+      "marginInline": "auto",
+      "padding": "px-5 sm:px-8 py-8 md:py-12"
+    },
+    "breakpoints": {
+      "mobile": "< 640px (default)",
+      "tablet": "sm: 640px",
+      "desktop": "md: 768px",
+      "wide": "lg: 1024px",
+      "ultrawide": "xl: 1280px"
+    }
+  },
+
+  "navigation": {
+    "desktop_sidebar": {
+      "activeItem": "bg-rosys-50 text-rosys-700 shadow-[0_0_0_1px_rgba(232,54,109,0.08)]",
+      "hoverItem": "hover:bg-warm-50",
+      "iconSize": "16px (desktop), 18px (mobile)",
+      "brandName": "font-semibold tracking-[-0.02em]"
+    },
+    "mobile_tab_bar": {
+      "activeColor": "text-rosys-600",
+      "inactiveColor": "text-rosys-fg-muted"
+    }
+  },
+
+  "interactions": {
+    "hoverCard": "box-shadow 0 4px 20px rgba(0,0,0,0.07)",
+    "hoverBorderAccent": "border-rosys-300",
+    "activeScale": "scale(0.97)",
+    "selectedState": "border-rosys-500 shadow-[0_0_0_2px_rgba(232,54,109,0.15)]",
+    "focusRing": "ring-2 ring-rosys-400/25 border-rosys-300",
+    "transitionDuration": "200ms",
+    "animationEase": "ease-out"
+  },
+
+  "iconography": {
+    "library": "lucide (lucide-react for React, lucide-svelte for SvelteKit)",
+    "strokeWidth": 1.5,
+    "defaultSize": "16px (inline), 20px (section headers), 24px (hero/empty states)",
+    "iconBackgrounds": {
+      "primary": "bg-rosys-50 text-rosys-500",
+      "success": "bg-emerald-50 text-emerald-500",
+      "neutral": "bg-warm-100 text-rosys-fg/40",
+      "warning": "bg-amber-50 text-amber-500"
+    }
+  },
+
+  "stacks": {
+    "rosys-testing": {
+      "framework": "React 18 + Vite",
+      "styling": "Tailwind CSS v3 + tailwind.config.ts",
+      "components": "shadcn/ui (Radix primitives)",
+      "routing": "react-router-dom v6",
+      "icons": "lucide-react",
+      "notifications": "sonner",
+      "backend": "Express.js (server.js on port 3004)",
+      "database": "Supabase (PostgreSQL + Auth + Storage)"
+    },
+    "rosys-platform": {
+      "framework": "SvelteKit + Svelte 5",
+      "styling": "Tailwind CSS v4 (@theme block in app.css)",
+      "icons": "lucide-svelte",
+      "routing": "SvelteKit filesystem routing",
+      "backend": "SvelteKit server routes (+page.server.ts)",
+      "database": "PostgreSQL (pg) + Supabase Auth"
+    }
+  },
+
+  "content_formatting": {
+    "description": "Intelligent content rendering pipeline inspired by pretext's approach to structured text from unstructured sources.",
+    "pipeline": [
+      "1. Server: joinWrappedLines() — re-joins hard-wrapped PDF lines using continuation heuristics",
+      "2. Server: parseInstructionSections() — splits into titled sections by ALL-CAPS header detection",
+      "3. Client: parseContent() — classifies each line into one of 7 rich types",
+      "4. Client: groupTableRows() — coalesces adjacent table-row lines into table blocks",
+      "5. Client: Svelte/React renderer — maps each type to a distinct visual component"
+    ],
+    "content_types": {
+      "text": "Standard paragraph — 14–15px, rosys-fg-secondary, leading-[1.8]. Auto-detects key:value patterns for bold labels.",
+      "numbered": "Pink rounded badge (rosys-50/rosys-600) + text. Auto-detects 'Name — description' for bold split.",
+      "bullet": "Small rosys-300 dot + indented text.",
+      "heading": "15px font-semibold rosys-fg — detected from ALL-CAPS lines under 60 chars, converted to Title Case.",
+      "dash-item": "White bordered card with dot + bold label + ' — ' + description. For 'Material — properties' patterns.",
+      "note": "Amber callout box with icon. Triggered by 'NOTE:', 'TIP:', 'IMPORTANT:' prefixes.",
+      "table-row": "Grouped into striped HTML tables with rosys-50 header row. Detected from tab-separated or size-measurement rows."
+    }
+  }
+}

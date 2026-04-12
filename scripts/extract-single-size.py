@@ -2,177 +2,119 @@
 """
 Extract a single size from a multi-size Rosys Patterns PDF.
 
-All 130 patterns use the same 7 CMYK colors from Optitex.
-This script removes the 6 unwanted size lines, keeping only:
-- The target size's color
-- Black (shared: text, grainlines, notches, logos)
-- Gray (shared: seam allowance outlines)
+Uses PDF Optional Content Groups (OCG) — each size is its own layer.
+Toggles unwanted size layers OFF via OCG metadata. Zero content stream
+modification — produces a PDF identical to the original except only
+the target size is visible. Opens perfectly in Adobe Acrobat, Chrome, Preview.
 
 Usage:
   python3 scripts/extract-single-size.py <input.pdf> <size> [output.pdf]
-  python3 scripts/extract-single-size.py /tmp/lena_a0.pdf M /tmp/lena_M_only.pdf
 
-Sizes: XXS, XS, S, M, L, XL, 2XL
-For 10-size patterns (XXS-5XL), sizes 3XL/4XL/5XL map to extended colors.
+Sizes: XXS, XS, S, M, L, XL, 2XL, 3XL, 4XL, 5XL
 """
 
 import argparse
 import sys
 import pikepdf
-from pikepdf import Operator, Array
 
-# ─── Validated CMYK → Size mapping ───
-# Determined by bounding-box analysis: smallest curves = XXS, largest = 2XL
-SIZE_COLORS = {
-    'XXS': (0.017, 0.441, 0.946, 0.000),   # Orange
-    'XS':  (0.572, 0.000, 0.115, 0.000),   # Cyan
-    'S':   (0.000, 1.000, 1.000, 0.000),   # Red
-    'M':   (0.813, 0.020, 0.980, 0.000),   # Green
-    'L':   (0.508, 0.805, 0.000, 0.000),   # Purple
-    'XL':  (0.154, 0.328, 0.643, 0.001),   # Tan/Brown
-    '2XL': (0.922, 0.892, 0.000, 0.000),   # Blue
-}
-
-# Colors to always keep (shared elements)
-SHARED_COLORS = {
-    'black': (0.000, 0.000, 0.000, 1.000),  # Text, grainlines, notches
-    'gray':  (0.563, 0.476, 0.472, 0.135),  # Seam allowance
-}
-
-TOLERANCE = 0.02  # Color matching tolerance
-
-
-def colors_match(a, b):
-    """Check if two CMYK tuples match within tolerance."""
-    if len(a) != 4 or len(b) != 4:
-        return False
-    return all(abs(float(a[i]) - b[i]) < TOLERANCE for i in range(4))
-
-
-def is_keep_color(cmyk, target_size):
-    """Should we keep drawing operations with this stroke color?"""
-    target_cmyk = SIZE_COLORS.get(target_size)
-    if not target_cmyk:
-        return True  # Unknown size, keep everything
-
-    # Keep target size color
-    if colors_match(cmyk, target_cmyk):
-        return True
-
-    # Keep shared colors
-    for shared in SHARED_COLORS.values():
-        if colors_match(cmyk, shared):
-            return True
-
-    # Check if this is a size color we should remove
-    for size, color in SIZE_COLORS.items():
-        if size != target_size and colors_match(cmyk, color):
-            return False  # This is another size — remove it
-
-    # Unknown color — keep it (might be special markings)
-    return True
+ALL_SIZES = ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL']
 
 
 def extract_single_size(input_path, target_size, output_path):
-    """Extract single size from multi-size PDF."""
     pdf = pikepdf.open(input_path)
 
-    total_removed = 0
-    total_kept = 0
+    oc_props = pdf.Root.get('/OCProperties')
+    if not oc_props:
+        print("WARNING: No OCG layers found, returning full PDF")
+        pdf.save(output_path, linearize=True)
+        pdf.close()
+        return 0, 0
 
-    for page_num, page in enumerate(pdf.pages):
-        content_stream = pikepdf.parse_content_stream(page)
+    ocgs = list(oc_props['/OCGs'])
+    size_names = [s.upper() for s in ALL_SIZES]
 
-        new_stream = []
-        current_stroke = None
-        pending_ops = []  # Operations between color set and path paint
-        in_path = False
-        path_ops = []
+    keep_on = []
+    turn_off = []
 
-        for operands, operator in content_stream:
-            op = str(operator)
+    for ocg in ocgs:
+        name = str(ocg.get('/Name', ''))
+        if name.upper() in size_names and name.upper() != target_size.upper():
+            turn_off.append(ocg)
+        else:
+            keep_on.append(ocg)
 
-            # Track stroke color
-            if op == 'K':
-                cmyk = tuple(round(float(o), 3) for o in operands[:4])
-                current_stroke = cmyk
-                # Only emit color-set if it's a color we're keeping
-                if is_keep_color(cmyk, target_size):
-                    new_stream.append((operands, operator))
-                continue
+    # Set default viewing configuration
+    d = oc_props.get('/D', pikepdf.Dictionary())
+    d['/ON'] = pikepdf.Array(keep_on)
+    d['/OFF'] = pikepdf.Array(turn_off)
+    d['/BaseState'] = pikepdf.Name('/OFF')
+    d['/Name'] = pikepdf.String(f'Size {target_size} only')
 
-            # Graphics state save/restore — always keep
-            if op in ('q', 'Q', 'cm', 'w', 'J', 'j', 'M', 'd', 'gs', 'ri', 'i'):
-                new_stream.append((operands, operator))
-                continue
+    # Set print/view/export states
+    d['/AS'] = pikepdf.Array([
+        pikepdf.Dictionary({
+            '/Event': pikepdf.Name('/View'),
+            '/OCGs': pikepdf.Array(keep_on),
+            '/Category': pikepdf.Array([pikepdf.Name('/View')])
+        }),
+        pikepdf.Dictionary({
+            '/Event': pikepdf.Name('/Print'),
+            '/OCGs': pikepdf.Array(keep_on),
+            '/Category': pikepdf.Array([pikepdf.Name('/Print')])
+        }),
+        pikepdf.Dictionary({
+            '/Event': pikepdf.Name('/Export'),
+            '/OCGs': pikepdf.Array(keep_on),
+            '/Category': pikepdf.Array([pikepdf.Name('/Export')])
+        })
+    ])
 
-            # Non-stroke color operations — always keep
-            if op in ('k', 'cs', 'CS', 'sc', 'SC', 'scn', 'SCN'):
-                new_stream.append((operands, operator))
-                continue
+    # Lock hidden layers, hide from layers panel
+    d['/Locked'] = pikepdf.Array(turn_off)
+    d['/ListMode'] = pikepdf.Name('/VisiblePages')
 
-            # Text operations — always keep (text is always black)
-            if op in ('BT', 'ET', 'Tf', 'Td', 'TD', 'Tm', 'T*',
-                       'Tj', 'TJ', "'", '"', 'Tc', 'Tw', 'Tz', 'TL', 'Tr', 'Ts'):
-                new_stream.append((operands, operator))
-                continue
+    oc_props['/D'] = d
+    pdf.Root['/OCProperties'] = oc_props
 
-            # Path construction — accumulate
-            if op in ('m', 'l', 'c', 'v', 'y', 'h', 're'):
-                path_ops.append((operands, operator))
-                in_path = True
-                continue
+    # Set individual OCG usage states
+    for ocg in turn_off:
+        ocg['/Usage'] = pikepdf.Dictionary({
+            '/Print': pikepdf.Dictionary({'/PrintState': pikepdf.Name('/OFF')}),
+            '/View': pikepdf.Dictionary({'/ViewState': pikepdf.Name('/OFF')}),
+            '/Export': pikepdf.Dictionary({'/ExportState': pikepdf.Name('/OFF')})
+        })
 
-            # Path painting — decide whether to keep or remove
-            if op in ('S', 's', 'f', 'F', 'f*', 'B', 'B*', 'b', 'b*', 'n'):
-                if current_stroke and not is_keep_color(current_stroke, target_size):
-                    # Remove this path — it belongs to a different size
-                    total_removed += len(path_ops) + 1
-                    path_ops = []
-                    in_path = False
-                    continue
-                else:
-                    # Keep this path
-                    total_kept += len(path_ops) + 1
-                    new_stream.extend(path_ops)
-                    new_stream.append((operands, operator))
-                    path_ops = []
-                    in_path = False
-                    continue
+    for ocg in keep_on:
+        ocg['/Usage'] = pikepdf.Dictionary({
+            '/Print': pikepdf.Dictionary({'/PrintState': pikepdf.Name('/ON')}),
+            '/View': pikepdf.Dictionary({'/ViewState': pikepdf.Name('/ON')}),
+            '/Export': pikepdf.Dictionary({'/ExportState': pikepdf.Name('/ON')})
+        })
 
-            # Image and other operations — always keep
-            new_stream.append((operands, operator))
-
-        # Flush any remaining path ops
-        if path_ops:
-            new_stream.extend(path_ops)
-
-        # Replace page content stream
-        page.Contents = pdf.make_stream(pikepdf.unparse_content_stream(new_stream))
-
-    pdf.save(output_path)
+    pdf.save(output_path, linearize=True)
     pdf.close()
 
-    return total_kept, total_removed
+    return len(keep_on), len(turn_off)
 
 
 def main():
     parser = argparse.ArgumentParser(description='Extract single size from multi-size sewing pattern PDF')
     parser.add_argument('input', help='Input multi-size PDF')
-    parser.add_argument('size', help='Target size (XXS, XS, S, M, L, XL, 2XL)')
+    parser.add_argument('size', help='Target size (XXS, XS, S, M, L, XL, 2XL, 3XL, 4XL, 5XL)')
     parser.add_argument('output', nargs='?', help='Output PDF path')
     args = parser.parse_args()
 
     size = args.size.upper()
-    if size not in SIZE_COLORS:
-        print(f"ERROR: Unknown size '{size}'. Valid: {', '.join(SIZE_COLORS.keys())}")
+    if size not in ALL_SIZES:
+        valid = ', '.join(ALL_SIZES)
+        print(f"ERROR: Unknown size '{size}'. Valid: {valid}")
         sys.exit(1)
 
     output = args.output or args.input.replace('.pdf', f'_{size}.pdf')
 
     print(f"Extracting size {size} from {args.input}")
-    kept, removed = extract_single_size(args.input, size, output)
-    print(f"Done: kept {kept} ops, removed {removed} ops")
+    on, off = extract_single_size(args.input, size, output)
+    print(f"Done: {on} layers ON, {off} layers OFF")
     print(f"Output: {output}")
 
 

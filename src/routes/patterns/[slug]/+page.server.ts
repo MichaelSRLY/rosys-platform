@@ -67,12 +67,18 @@ export const load: PageServerLoad = async ({ params }) => {
 
 	const signedUrls = await signPatternUrls(filePaths);
 
+	const prettyName = pattern.pattern_name.replace(/\s+/g, '-');
+	function withDownload(url: string | null, filename: string): string | null {
+		if (!url) return null;
+		return url + (url.includes('?') ? '&' : '?') + 'download=' + encodeURIComponent(filename);
+	}
+
 	const downloads = [
-		pattern.has_instructions && { label: 'Instructions PDF', sub: 'Step-by-step sewing guide', href: signedUrls[`${slug}/instructions/instructions.pdf`] },
-		pattern.has_a0 && { label: 'A0 Pattern Sheet', sub: 'Print at copy shop', href: signedUrls[`${slug}/a0/a0.pdf`] },
-		{ label: 'A4 Pattern', sub: 'Home printer format', href: signedUrls[`${slug}/a4/a4.pdf`] },
-		{ label: 'US Letter Pattern', sub: 'US paper size', href: signedUrls[`${slug}/us_letter/us_letter.pdf`] },
-		pattern.has_dxf && { label: 'DXF Pattern File', sub: 'For projector cutting', href: signedUrls[`${slug}/dxf/${dxfName}.dxf`] }
+		pattern.has_instructions && { label: 'Instructions PDF', sub: 'Step-by-step sewing guide', href: withDownload(signedUrls[`${slug}/instructions/instructions.pdf`], `${prettyName}-Instructions.pdf`) },
+		pattern.has_a0 && { label: 'A0 Pattern Sheet', sub: 'Print at copy shop', href: withDownload(signedUrls[`${slug}/a0/a0.pdf`], `${prettyName}-A0.pdf`) },
+		{ label: 'A4 Pattern', sub: 'Home printer format', href: withDownload(signedUrls[`${slug}/a4/a4.pdf`], `${prettyName}-A4.pdf`) },
+		{ label: 'US Letter Pattern', sub: 'US paper size', href: withDownload(signedUrls[`${slug}/us_letter/us_letter.pdf`], `${prettyName}-US-Letter.pdf`) },
+		pattern.has_dxf && { label: 'DXF Pattern File', sub: 'For projector cutting', href: withDownload(signedUrls[`${slug}/dxf/${dxfName}.dxf`], `${prettyName}.dxf`) }
 	].filter(Boolean) as Array<{ label: string; sub: string; href: string | null }>;
 
 	const imageUrl = signedUrls[`${slug}/thumbnail/thumbnail.webp`] || signedUrls[getFinishedFrontPath(slug, name)] || null;

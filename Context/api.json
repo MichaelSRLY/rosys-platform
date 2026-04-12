@@ -1,0 +1,706 @@
+{
+  "$schema": "https://rosyspatterns.com/api/v1",
+  "name": "Rosys Platform API",
+  "version": "1.0.0",
+  "baseUrl": "https://platform-rosys.vercel.app",
+  "framework": "SvelteKit",
+  "auth": {
+    "type": "supabase-session",
+    "description": "Authentication via Supabase Auth. Sessions are managed through cookies set by the SvelteKit server. The layout server load exposes session data to all routes via locals.session. OAuth callback at /auth/callback exchanges auth codes for sessions."
+  },
+  "endpoints": [
+    {
+      "method": "POST",
+      "path": "/api/patterns/signed-url",
+      "description": "Generate signed URLs for pattern files stored in Supabase Storage. Used to create time-limited download links for pattern PDFs, DXF files, thumbnails, and illustrations.",
+      "auth": true,
+      "params": null,
+      "body": {
+        "type": "json",
+        "schema": {
+          "paths": {
+            "type": "string[]",
+            "required": true,
+            "description": "Array of storage paths to sign. Max 20 paths per request. Path traversal ('..') is rejected.",
+            "example": ["121_aylani_coat/a0/a0.pdf", "121_aylani_coat/thumbnail/thumbnail.webp"]
+          }
+        }
+      },
+      "response": {
+        "type": "json",
+        "schema": {
+          "urls": {
+            "type": "Record<string, string>",
+            "description": "Map of storage path to signed URL"
+          }
+        }
+      },
+      "example": {
+        "request": "POST /api/patterns/signed-url\n{\"paths\": [\"121_aylani_coat/a0/a0.pdf\", \"121_aylani_coat/instructions/instructions.pdf\"]}",
+        "response": "{\"urls\": {\"121_aylani_coat/a0/a0.pdf\": \"https://...supabase.co/storage/v1/object/sign/...\", \"121_aylani_coat/instructions/instructions.pdf\": \"https://...\"}}"
+      },
+      "notes": "Paths are validated to prevent directory traversal. Array is limited to 20 entries. URLs expire after the duration set in signPatternUrls (typically 1 hour)."
+    },
+    {
+      "method": "GET",
+      "path": "/api/patterns/single-size",
+      "description": "Extract a single size from a multi-size pattern PDF. Checks Supabase Storage cache first; if not cached, downloads the original PDF, runs a Python extraction script, caches the result, and returns the single-size PDF.",
+      "auth": true,
+      "params": {
+        "slug": {
+          "type": "string",
+          "required": true,
+          "description": "Pattern slug identifier",
+          "example": "121_aylani_coat"
+        },
+        "size": {
+          "type": "string",
+          "required": true,
+          "description": "Size to extract",
+          "enum": ["XXS", "XS", "S", "M", "L", "XL", "2XL"],
+          "example": "M"
+        },
+        "format": {
+          "type": "string",
+          "required": false,
+          "default": "a0",
+          "description": "Paper format of the source PDF",
+          "enum": ["a0", "a4", "us_letter"],
+          "example": "a4"
+        }
+      },
+      "body": null,
+      "response": {
+        "type": "pdf",
+        "description": "Returns either a 302 redirect to a cached signed URL, or the PDF binary directly with Content-Disposition attachment header.",
+        "headers": {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": "attachment; filename=\"aylani-coat-M-a0.pdf\"",
+          "Cache-Control": "public, max-age=86400"
+        }
+      },
+      "example": {
+        "request": "GET /api/patterns/single-size?slug=121_aylani_coat&size=M&format=a0",
+        "response": "[302 redirect to signed URL, or binary PDF]"
+      },
+      "notes": "Requires Python 3 and the extract-single-size.py script on the server. First request for a size/format combination takes longer (generation + caching). Subsequent requests redirect to the cached version. Timeout for extraction is 30 seconds."
+    },
+    {
+      "method": "GET",
+      "path": "/api/patterns/page-image",
+      "description": "Convert a specific page from a pattern's instructions PDF to a PNG image. Uses pdftoppm for conversion. Results are cached in a temp directory on the server filesystem.",
+      "auth": true,
+      "params": {
+        "slug": {
+          "type": "string",
+          "required": true,
+          "description": "Pattern slug identifier",
+          "example": "121_aylani_coat"
+        },
+        "page": {
+          "type": "integer",
+          "required": true,
+          "description": "1-based page number to render",
+          "example": 3
+        }
+      },
+      "body": null,
+      "response": {
+        "type": "png",
+        "description": "PNG image of the requested PDF page at 200 DPI",
+        "headers": {
+          "Content-Type": "image/png",
+          "Cache-Control": "public, max-age=86400"
+        }
+      },
+      "example": {
+        "request": "GET /api/patterns/page-image?slug=121_aylani_coat&page=3",
+        "response": "[binary PNG image]"
+      },
+      "notes": "Requires pdftoppm (poppler-utils) installed on the server. Looks for instructions PDF at {slug}/instructions/instructions.pdf or {slug}/instructions /instructions.pdf (with trailing space — legacy path). Conversion timeout is 15 seconds. Cache is in OS temp directory and does not persist across deployments."
+    },
+    {
+      "method": "POST",
+      "path": "/api/patterns/generate-custom",
+      "description": "Generate a custom-sized pattern by scaling the original pattern files based on the customer's body measurements. Uses grading algorithms to calculate scale factors, then generates modified pattern files. Can be used in preview mode (grading data only) or generation mode (actual file creation).",
+      "auth": true,
+      "params": null,
+      "body": {
+        "type": "json",
+        "schema": {
+          "pattern_slug": {
+            "type": "string",
+            "required": true,
+            "description": "Pattern slug identifier",
+            "example": "121_aylani_coat"
+          },
+          "bust": {
+            "type": "number",
+            "required": true,
+            "description": "Bust measurement in cm",
+            "example": 92
+          },
+          "waist": {
+            "type": "number",
+            "required": true,
+            "description": "Waist measurement in cm",
+            "example": 74
+          },
+          "hip": {
+            "type": "number",
+            "required": true,
+            "description": "Hip measurement in cm",
+            "example": 98
+          },
+          "generate": {
+            "type": "boolean",
+            "required": false,
+            "default": false,
+            "description": "If false/omitted, returns grading preview only. If true, generates actual pattern files."
+          },
+          "format": {
+            "type": "string",
+            "required": false,
+            "description": "When generate=true, return a specific format as binary download instead of metadata for all formats",
+            "enum": ["a0", "a4", "us_letter"],
+            "example": "a0"
+          }
+        }
+      },
+      "response": {
+        "type": "json",
+        "schema": {
+          "grading": {
+            "type": "object",
+            "description": "Grading calculation result with scale_width, scale_height, target_size, and fit analysis"
+          },
+          "error": {
+            "type": "string|null",
+            "description": "Present when adjustment exceeds 25% threshold"
+          },
+          "files": {
+            "type": "array|null",
+            "description": "When generate=true and no specific format requested. Array of {format, label, filename, size} objects."
+          }
+        }
+      },
+      "example": {
+        "request": "POST /api/patterns/generate-custom\n{\"pattern_slug\": \"121_aylani_coat\", \"bust\": 92, \"waist\": 74, \"hip\": 98}",
+        "response": "{\"grading\": {\"scale_width\": 1.04, \"scale_height\": 1.02, \"target_size\": \"M\", ...}}"
+      },
+      "notes": "Scaling is capped at +/- 25% from the base pattern size. If exceeded, returns a grading object with an error message instead of 4xx. When format is specified with generate=true, the response is a binary file download (application/pdf) instead of JSON."
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/upload-illustration",
+      "description": "Upload a step illustration image for a pattern's interactive instructions. Admin-only endpoint. Uploads to Supabase Storage and returns the storage path and a signed preview URL.",
+      "auth": true,
+      "adminOnly": true,
+      "params": null,
+      "body": {
+        "type": "multipart/form-data",
+        "schema": {
+          "file": {
+            "type": "File",
+            "required": true,
+            "description": "Image file to upload (PNG, JPG, WebP, etc.)"
+          },
+          "slug": {
+            "type": "string",
+            "required": true,
+            "description": "Pattern slug",
+            "example": "121_aylani_coat"
+          },
+          "step": {
+            "type": "string",
+            "required": true,
+            "description": "Step number",
+            "example": "3"
+          },
+          "index": {
+            "type": "string",
+            "required": false,
+            "default": "1",
+            "description": "Image index within the step (for steps with multiple illustrations)",
+            "example": "1"
+          }
+        }
+      },
+      "response": {
+        "type": "json",
+        "schema": {
+          "path": {
+            "type": "string",
+            "description": "Storage path of the uploaded file",
+            "example": "121_aylani_coat/step-illustrations/step_3_1.png"
+          },
+          "signedUrl": {
+            "type": "string|null",
+            "description": "Signed URL for preview (1 hour expiry)"
+          }
+        }
+      },
+      "example": {
+        "request": "POST /api/admin/upload-illustration\n[FormData: file=step3.png, slug=121_aylani_coat, step=3, index=1]",
+        "response": "{\"path\": \"121_aylani_coat/step-illustrations/step_3_1.png\", \"signedUrl\": \"https://...\"}"
+      },
+      "notes": "Requires admin privileges (locals.isAdmin). Uses upsert so re-uploading overwrites the existing file. Files are stored at {slug}/step-illustrations/step_{stepNum}_{index}.{ext}."
+    },
+    {
+      "method": "POST",
+      "path": "/api/ai/size-recommendation",
+      "description": "Get an AI-powered size recommendation for a pattern. Uses a hybrid approach: first performs deterministic size matching against the pattern's size chart, then optionally enhances with Gemini AI for ambiguous cases. Falls back to pure LLM recommendation if no structured size chart exists.",
+      "auth": true,
+      "params": null,
+      "body": {
+        "type": "json",
+        "schema": {
+          "bust": {
+            "type": "number",
+            "required": true,
+            "description": "Bust measurement in cm",
+            "example": 92
+          },
+          "waist": {
+            "type": "number",
+            "required": true,
+            "description": "Waist measurement in cm",
+            "example": 74
+          },
+          "hip": {
+            "type": "number",
+            "required": true,
+            "description": "Hip measurement in cm",
+            "example": 98
+          },
+          "height": {
+            "type": "number",
+            "required": false,
+            "description": "Height in cm",
+            "example": 168
+          },
+          "pattern_slug": {
+            "type": "string",
+            "required": true,
+            "description": "Pattern slug for pattern-specific size chart lookup",
+            "example": "121_aylani_coat"
+          }
+        }
+      },
+      "response": {
+        "type": "json",
+        "schema": {
+          "recommendation": {
+            "type": "string",
+            "description": "Natural language size recommendation text"
+          },
+          "structured": {
+            "type": "object|null",
+            "description": "Structured match data when size chart is available. Contains recommended (size, score, bust/waist/hip fit details, ease), betweenSizes flag, lowerSize, upperSize, allMatches array."
+          }
+        }
+      },
+      "example": {
+        "request": "POST /api/ai/size-recommendation\n{\"pattern_slug\": \"121_aylani_coat\", \"bust\": 92, \"waist\": 74, \"hip\": 98}",
+        "response": "{\"recommendation\": \"Based on your measurements (Bust: 92cm, Waist: 74cm, Hip: 98cm), we recommend size M...\", \"structured\": {\"recommended\": {\"size\": \"M\", \"score\": 2.3, ...}}}"
+      },
+      "notes": "Uses Gemini 3 Flash Preview for AI-enhanced recommendations. Falls back gracefully if no API key is configured or if the AI call fails. Clear matches (not between sizes, score < 6) skip the LLM entirely for faster responses. Valid sizes: XXS, XS, S, M, L, XL, 2XL."
+    },
+    {
+      "method": "POST",
+      "path": "/api/ai/size-intelligence",
+      "description": "Advanced AI size recommendation using the full pattern intelligence system. Provides a comprehensive recommendation by analyzing the pattern's complete data (product identity, construction details, DXF pieces, size charts, finished garment images).",
+      "auth": true,
+      "params": null,
+      "body": {
+        "type": "json",
+        "schema": {
+          "pattern_slug": {
+            "type": "string",
+            "required": true,
+            "description": "Pattern slug identifier",
+            "example": "121_aylani_coat"
+          },
+          "bust": {
+            "type": "number",
+            "required": true,
+            "description": "Bust measurement in cm",
+            "example": 92
+          },
+          "waist": {
+            "type": "number",
+            "required": true,
+            "description": "Waist measurement in cm",
+            "example": 74
+          },
+          "hip": {
+            "type": "number",
+            "required": true,
+            "description": "Hip measurement in cm",
+            "example": 98
+          },
+          "height": {
+            "type": "number",
+            "required": false,
+            "description": "Height in cm"
+          },
+          "weight": {
+            "type": "number",
+            "required": false,
+            "description": "Weight in kg"
+          },
+          "source": {
+            "type": "string",
+            "required": false,
+            "default": "tape_measure",
+            "description": "How measurements were obtained",
+            "example": "tape_measure"
+          }
+        }
+      },
+      "response": {
+        "type": "json",
+        "schema": {
+          "recommendation": {
+            "type": "object",
+            "description": "Full AI recommendation object from getAISizeRecommendation"
+          }
+        }
+      },
+      "example": {
+        "request": "POST /api/ai/size-intelligence\n{\"pattern_slug\": \"121_aylani_coat\", \"bust\": 92, \"waist\": 74, \"hip\": 98, \"height\": 168, \"source\": \"tape_measure\"}",
+        "response": "{\"recommendation\": {...}}"
+      },
+      "notes": "This is the non-streaming version. For real-time progressive results, use the /stream endpoint instead. Delegates to the getAISizeRecommendation library function which uses the full pattern intelligence pipeline."
+    },
+    {
+      "method": "POST",
+      "path": "/api/ai/size-intelligence/stream",
+      "description": "Streaming size intelligence endpoint. Returns Server-Sent Events (SSE) with progressive results: first an instant deterministic size match with full chart data and body profile, then streamed AI narrative tokens from Claude Sonnet. Supports follow-up analysis with fit preferences.",
+      "auth": true,
+      "params": null,
+      "body": {
+        "type": "json",
+        "schema": {
+          "pattern_slug": {
+            "type": "string",
+            "required": true,
+            "description": "Pattern slug identifier",
+            "example": "121_aylani_coat"
+          },
+          "bust": {
+            "type": "number",
+            "required": true,
+            "description": "Bust measurement in cm",
+            "example": 92
+          },
+          "waist": {
+            "type": "number",
+            "required": true,
+            "description": "Waist measurement in cm",
+            "example": 74
+          },
+          "hip": {
+            "type": "number",
+            "required": true,
+            "description": "Hip measurement in cm",
+            "example": 98
+          },
+          "height": {
+            "type": "number",
+            "required": false,
+            "description": "Height in cm (enables body profile prediction)"
+          },
+          "source": {
+            "type": "string",
+            "required": false,
+            "description": "Measurement source: 'tape_measure' or 'photo'",
+            "example": "tape_measure"
+          },
+          "preferences": {
+            "type": "object|null",
+            "required": false,
+            "description": "Fit preferences for follow-up re-analysis",
+            "schema": {
+              "fit_preference": { "type": "string", "example": "relaxed" },
+              "bust_preference": { "type": "string", "example": "more room" },
+              "waist_preference": { "type": "string", "example": "fitted" },
+              "hip_preference": { "type": "string", "example": "comfortable" },
+              "length_preference": { "type": "string", "example": "shorter" },
+              "fabric_stretch": { "type": "string", "example": "no stretch" },
+              "notes": { "type": "string", "example": "I prefer looser sleeves" }
+            }
+          },
+          "previous_recommendation": {
+            "type": "string|null",
+            "required": false,
+            "description": "The previous AI recommendation text, used when re-analyzing with preferences"
+          }
+        }
+      },
+      "response": {
+        "type": "stream",
+        "contentType": "text/event-stream",
+        "events": [
+          {
+            "event": "deterministic",
+            "description": "Instant size match result with full pattern data. Sent immediately.",
+            "schema": {
+              "recommended_size": "string (e.g. 'M')",
+              "score": "number",
+              "between_sizes": "boolean",
+              "lower_size": "string|null",
+              "upper_size": "string|null",
+              "fit": {
+                "bust": "object|null (chart_cm, diff_cm, fit description)",
+                "waist": "object|null",
+                "hip": "object|null"
+              },
+              "ease": {
+                "bust_cm": "number|null",
+                "waist_cm": "number|null",
+                "hip_cm": "number|null"
+              },
+              "profile": "object|null (predicted body profile with shoulder_cm, arm_length_cm, leg_length_cm, weight_kg)",
+              "pattern_name": "string",
+              "chart": {
+                "sizes": "string[] (e.g. ['XXS','XS','S','M','L','XL','2XL'])",
+                "body": "array of {size, bust_cm, waist_cm, hip_cm}",
+                "finished": "array of {size, bust_cm, waist_cm, hip_cm, full_length_cm, sleeve_length_cm}"
+              },
+              "has_dxf": "boolean"
+            }
+          },
+          {
+            "event": "chunk",
+            "description": "AI narrative text token. Accumulate these to build the full recommendation.",
+            "schema": "string (text fragment)"
+          },
+          {
+            "event": "done",
+            "description": "Stream complete. Empty object.",
+            "schema": "{}"
+          },
+          {
+            "event": "error",
+            "description": "Error occurred during processing.",
+            "schema": {
+              "message": "string"
+            }
+          }
+        ]
+      },
+      "example": {
+        "request": "POST /api/ai/size-intelligence/stream\n{\"pattern_slug\": \"121_aylani_coat\", \"bust\": 92, \"waist\": 74, \"hip\": 98, \"height\": 168}",
+        "response": "event: deterministic\ndata: {\"recommended_size\":\"M\",\"score\":2.3,\"between_sizes\":false,...}\n\nevent: chunk\ndata: \"## Recommended Size\\n\"\n\nevent: chunk\ndata: \"Size M\\n\\n\"\n\nevent: chunk\ndata: \"## Why This Size\\n\"\n\n...\n\nevent: done\ndata: {}\n"
+      },
+      "notes": "Uses Claude Sonnet 4.6 via the Anthropic API with streaming. Includes multimodal vision — sends up to 2 verified finished garment images to Claude for garment-aware advice. Falls back to text-only if images fail. If no ANTHROPIC_API_KEY is configured, returns a basic deterministic recommendation without AI narrative. The body profile predictor uses an MLP model trained on 59K subjects. Follow-up requests with preferences use a different system prompt focused on what changed."
+    },
+    {
+      "method": "POST",
+      "path": "/api/ai/body-profile",
+      "description": "Predict a body profile from basic measurements using an MLP model trained on 59K subjects. Returns predicted shoulder width, arm length, leg length, and estimated weight.",
+      "auth": true,
+      "params": null,
+      "body": {
+        "type": "json",
+        "schema": {
+          "bust": {
+            "type": "number",
+            "required": true,
+            "description": "Bust measurement in cm",
+            "example": 92
+          },
+          "waist": {
+            "type": "number",
+            "required": true,
+            "description": "Waist measurement in cm",
+            "example": 74
+          },
+          "hip": {
+            "type": "number",
+            "required": true,
+            "description": "Hip measurement in cm",
+            "example": 98
+          },
+          "height": {
+            "type": "number",
+            "required": true,
+            "description": "Height in cm",
+            "example": 168
+          }
+        }
+      },
+      "response": {
+        "type": "json",
+        "schema": {
+          "profile": {
+            "type": "object",
+            "description": "Predicted body profile",
+            "properties": {
+              "shoulder_cm": "number",
+              "arm_length_cm": "number",
+              "leg_length_cm": "number",
+              "weight_kg": "number|null"
+            }
+          }
+        }
+      },
+      "example": {
+        "request": "POST /api/ai/body-profile\n{\"bust\": 92, \"waist\": 74, \"hip\": 98, \"height\": 168}",
+        "response": "{\"profile\": {\"shoulder_cm\": 40.2, \"arm_length_cm\": 58.5, \"leg_length_cm\": 76.3, \"weight_kg\": 65.1}}"
+      },
+      "notes": "Uses a local MLP predictor (no external API calls). All four measurements are required. The model was trained on data from 59,000 body scan subjects."
+    },
+    {
+      "method": "POST",
+      "path": "/api/ai/pattern-help",
+      "description": "Conversational AI assistant for pattern-related questions. Fetches pattern context (instructions, product identity, DXF pieces, YouTube tutorials) from the database and uses Gemini to answer sewing questions about the specific pattern.",
+      "auth": true,
+      "params": null,
+      "body": {
+        "type": "json",
+        "schema": {
+          "question": {
+            "type": "string",
+            "required": true,
+            "description": "The user's question about the pattern",
+            "example": "What fabric should I use for this coat?"
+          },
+          "pattern_slug": {
+            "type": "string",
+            "required": true,
+            "description": "Pattern slug for context retrieval",
+            "example": "121_aylani_coat"
+          },
+          "history": {
+            "type": "array|null",
+            "required": false,
+            "description": "Previous conversation messages for multi-turn context",
+            "items": {
+              "role": "string ('user' | 'assistant')",
+              "content": "string"
+            },
+            "example": [
+              { "role": "user", "content": "What seam allowance is included?" },
+              { "role": "assistant", "content": "The pattern includes a 1cm seam allowance..." }
+            ]
+          }
+        }
+      },
+      "response": {
+        "type": "json",
+        "schema": {
+          "answer": {
+            "type": "string",
+            "description": "AI-generated answer to the sewing question"
+          }
+        }
+      },
+      "example": {
+        "request": "POST /api/ai/pattern-help\n{\"question\": \"What fabric should I use?\", \"pattern_slug\": \"121_aylani_coat\", \"history\": []}",
+        "response": "{\"answer\": \"For the Aylani Coat, I'd recommend a medium-weight woven fabric like wool blend, cotton twill, or linen...\"}"
+      },
+      "notes": "Uses Gemini 3 Flash Preview. Context is trimmed to 12,000 characters to stay within limits. Retrieves instructions_text, product_identity, dxf_pattern_piece, and youtube_tutorial chunks from cs_pattern_embeddings. Returns 502 if Gemini API is unavailable."
+    },
+    {
+      "method": "GET",
+      "path": "/auth/callback",
+      "description": "OAuth callback handler for Supabase Auth. Exchanges the authorization code for a session and redirects to the home page.",
+      "auth": false,
+      "params": {
+        "code": {
+          "type": "string",
+          "required": true,
+          "description": "Authorization code from Supabase Auth OAuth flow"
+        }
+      },
+      "body": null,
+      "response": {
+        "type": "redirect",
+        "status": 303,
+        "location": "/"
+      },
+      "example": {
+        "request": "GET /auth/callback?code=abc123",
+        "response": "[303 redirect to /]"
+      },
+      "notes": "This is not a REST API endpoint — it's the OAuth callback URL configured in Supabase Auth. Do not call directly."
+    }
+  ],
+  "pages": [
+    {
+      "path": "/",
+      "description": "Root layout. All pages inherit session data from the layout server load.",
+      "serverData": "Returns { session } from locals.session. This makes the authenticated user's session available to every page in the app."
+    },
+    {
+      "path": "/patterns",
+      "description": "Pattern catalog page. Shows all available patterns, highlighting which ones the user has purchased via Shopify and which are free based on their registration date.",
+      "serverData": "Loads all patterns from cs_pattern_catalog. Fetches Shopify orders by user email to determine purchased patterns. Identifies free patterns based on user's profile creation date. Generates signed thumbnail URLs for pattern images. Returns: { purchasedPatterns: Pattern[], freePatterns: Pattern[], allPatterns: Pattern[], orderCount: number, thumbnails: Record<slug, signedUrl> }"
+    },
+    {
+      "path": "/patterns/[slug]",
+      "description": "Individual pattern detail page. Shows pattern overview, description, tutorials, download links, and illustration count.",
+      "serverData": "Fetches pattern from cs_pattern_catalog by slug. Loads all embeddings (instructions_text, product_identity, dxf_pattern_piece, youtube_tutorial, instruction_illustration, size_chart_text) from cs_pattern_embeddings. Parses instructions into structured data (difficulty, materials, fabric suggestions, sewing steps, pattern pieces). Signs download URLs for all available formats (instructions PDF, A0, A4, US Letter, DXF). Returns: { pattern, parsedPattern, tutorials: [{title, url}], description, downloads: [{label, sub, href}], imageUrl, hasDxf, illustrationCount, pieceCount }"
+    },
+    {
+      "path": "/patterns/[slug]/sizing",
+      "description": "Interactive sizing page for a specific pattern. Shows the pattern's size chart and allows measurement input for AI-powered recommendations.",
+      "serverData": "Fetches pattern name from cs_pattern_catalog. Loads structured size chart via getPatternSizeChart (body measurements + finished garment measurements per size). Falls back to raw size chart text from embeddings if no structured chart exists. Loads user's saved measurement profile from measurement_profiles table if authenticated. Returns: { pattern: {pattern_slug, pattern_name}, chart: PatternSizeChart|null, rawSizeChart: string|null, savedProfile: {bust_cm, waist_cm, hip_cm, height_cm}|null }"
+    },
+    {
+      "path": "/patterns/[slug]/instructions",
+      "description": "Interactive step-by-step instructions viewer for a pattern. Presents a paginated view with structured content: about page, materials, fabrics, pattern pieces, cutting layout, and individual sewing steps with illustrations.",
+      "serverData": "Fetches pattern from cs_pattern_catalog. Loads instructions_text and instruction_illustration embeddings. Parses instructions into structured steps. Loads admin step configuration (custom illustrations + layout per step) from pattern_admin table. Signs URLs for admin-uploaded illustrations. Builds an ordered page array with page types: 'about', 'materials', 'fabrics', 'pieces', 'layout', 'step'. Each page has layout ('text-left', 'text-right', 'image-top', 'text-only'), illustrations (signed URLs), and optional pdfPage fallback number. Returns: { pattern, parsed, sizeChartRaw, pages: [{id, title, subtitle, type, layout, illustrations, pdfPage}], totalPages }"
+    },
+    {
+      "path": "/voting",
+      "description": "Community voting page for pattern designs. Users can vote for their favorite designs within an active voting period.",
+      "serverData": "Fetches active voting period from voting_periods table. Loads designs with vote counts from accurate_design_votes view. Fetches current user's votes via get_user_votes RPC. Returns: { period: VotingPeriod|null, isVotingOpen: boolean, designs: [{id, title, vote_count, image_url}], userVotes: number[] (design IDs), maxVotes: number (default 5) }"
+    },
+    {
+      "path": "/magazine",
+      "description": "Digital magazine viewer. Displays the current edition as page-by-page WebP images with social features (comments and likes per page).",
+      "serverData": "Returns hardcoded edition config (title, pageCount, folder path, special page indices). Generates page array with index and src path. Fetches all comments (joined with profiles for username) and likes from Supabase, grouped by page_index. Tracks which pages the current user has liked. Returns: { edition: {title, pageCount, folder, downloadPageIndex, bookPageIndex, patternLink, diyLink}, pages: [{index, src}], commentsByPage: Record<pageIndex, Comment[]>, likesByPage: Record<pageIndex, count>, userLikes: Record<pageIndex, likeId> }"
+    }
+  ],
+  "database": {
+    "provider": "Supabase (PostgreSQL)",
+    "keyTables": [
+      "cs_pattern_catalog — Pattern registry with slug, name, format availability flags (has_a0, has_instructions, has_finished_images, has_dxf)",
+      "cs_pattern_embeddings — Chunked pattern data: instructions_text, product_identity, dxf_pattern_piece, youtube_tutorial, instruction_illustration, size_chart_text, finished_image. Each chunk has description, metadata JSON, chunk_index.",
+      "profiles — User profiles with username, created_at",
+      "measurement_profiles — Saved user body measurements (bust_cm, waist_cm, hip_cm, height_cm)",
+      "comments — Page-level comments on magazine pages (page_index, content, user_id)",
+      "likes — Page-level likes on magazine pages (page_index, user_id)",
+      "voting_periods — Voting period config (is_active, end_time, max_votes_per_user)",
+      "accurate_design_votes — View: designs with aggregated vote counts",
+      "pattern_admin — Admin config per pattern (steps_config JSON for instruction illustration layout)"
+    ],
+    "storage": {
+      "bucket": "pattern-files",
+      "structure": "{slug}/a0/a0.pdf, {slug}/a4/a4.pdf, {slug}/us_letter/us_letter.pdf, {slug}/instructions/instructions.pdf, {slug}/dxf/{NAME}.dxf, {slug}/thumbnail/thumbnail.webp, {slug}/finished/{name}_front.webp, {slug}/step-illustrations/step_{n}_{i}.{ext}, {slug}/single-size/{SIZE}/{format}.pdf (cached)"
+    }
+  },
+  "externalServices": {
+    "anthropic": {
+      "model": "claude-sonnet-4-6",
+      "usage": "Streaming size intelligence narrative with multimodal vision (finished garment images)",
+      "envVar": "ANTHROPIC_API_KEY"
+    },
+    "gemini": {
+      "model": "gemini-3-flash-preview",
+      "usage": "Size recommendation (ambiguous cases), pattern help chatbot",
+      "envVar": "GEMINI_API_KEY"
+    },
+    "shopify": {
+      "usage": "Order lookup by email to determine which patterns a user has purchased",
+      "library": "$lib/shopify.server"
+    },
+    "supabase": {
+      "usage": "Auth, database (PostgreSQL), file storage (pattern-files bucket)",
+      "envVars": ["PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_KEY"]
+    }
+  }
+}

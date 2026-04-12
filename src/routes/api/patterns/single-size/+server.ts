@@ -12,7 +12,7 @@ import { randomUUID } from 'crypto';
 
 const execAsync = promisify(exec);
 
-const VALID_SIZES = ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL'];
+const VALID_SIZES = ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
 const VALID_FORMATS = ['a0', 'a4', 'us_letter'];
 
 function getAdmin() {

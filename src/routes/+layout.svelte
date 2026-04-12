@@ -28,9 +28,20 @@
 {#if isLoginPage}
 	{@render children()}
 {:else}
-	<div class="h-screen bg-warm-50 md:p-3 md:flex md:gap-0 overflow-hidden">
+	<div class="grain h-screen md:p-4 md:flex md:gap-3 overflow-hidden mesh-bg">
+		<!-- Sidebar wrapper with floating depth -->
 		<Nav session={data.session} />
-		<main class="flex-1 overflow-auto pb-24 md:pb-0 md:bg-white/40 md:rounded-2xl md:border md:border-rosys-border/30">
+
+		<!-- Main content area with glass effect -->
+		<main
+			class="flex-1 overflow-auto pb-24 md:pb-0 md:rounded-3xl md:border md:border-white/60 relative"
+			style="
+				background: linear-gradient(180deg, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0.45) 100%);
+				backdrop-filter: saturate(180%) blur(20px);
+				-webkit-backdrop-filter: saturate(180%) blur(20px);
+				box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255,255,255,0.5) inset;
+			"
+		>
 			{@render children()}
 		</main>
 	</div>
