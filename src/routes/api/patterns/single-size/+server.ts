@@ -36,13 +36,20 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	// Check cache first
 	const { data: cached } = await admin.storage
 		.from('pattern-files')
-		.createSignedUrl(cachePath, 3600);
+		.download(cachePath);
 
-	if (cached?.signedUrl) {
-		// Cached version exists — redirect to signed URL
-		return new Response(null, {
-			status: 302,
-			headers: { Location: cached.signedUrl }
+	if (cached) {
+		const patternName = slug.replace(/^\d+_/, '').replace(/_/g, '-');
+		const filename = `${patternName}-${size}-${format}.pdf`;
+		const buffer = Buffer.from(await cached.arrayBuffer());
+
+		return new Response(buffer, {
+			headers: {
+				'Content-Type': 'application/pdf',
+				'Content-Disposition': `attachment; filename="${filename}"`,
+				'Content-Length': buffer.length.toString(),
+				'Cache-Control': 'public, max-age=86400'
+			}
 		});
 	}
 
