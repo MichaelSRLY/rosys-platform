@@ -53,17 +53,17 @@ def scale_pattern(input_path, scale_w, scale_h, output_path):
         )
 
         # Append a fresh 2x2cm test square at bottom-left, outside the transform
-        # This is drawn at true scale — not affected by the pattern scaling
+        # This is drawn at true scale - not affected by the pattern scaling
         margin = 15  # points from page edge
         sq = CM2     # 2cm = 56.693 pt
 
         test_square = f"""
 q
-% White background to cover any scaled test square underneath
+% White background to cover scaled test square
 1 1 1 rg
 {margin - 3:.2f} {margin - 3:.2f} {sq + 6:.2f} {sq + 6:.2f} re f
 
-% Black border — test square outline
+% Black border - test square outline
 0 0 0 RG 0 0 0 rg
 0.75 w
 {margin:.2f} {margin:.2f} {sq:.2f} {sq:.2f} re S
