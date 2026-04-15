@@ -713,8 +713,10 @@
 								<div class="custom-loading"><Loader2 class="w-5 h-5 animate-spin text-violet-500" strokeWidth={2} /><span>Calculating...</span></div>
 							{:else if customFitGrading}
 								<div class="overflow-x-auto mb-4">
-									<table class="tbl"><thead><tr><th></th><th>Pattern ({customFitGrading.sample_size})</th><th class="tv">Custom</th><th>Delta</th></tr></thead>
-										<tbody>{#each [{l:'Bust',s:customFitGrading.sample_finished.bust_cm,c:customFitGrading.custom_finished.bust_cm,d:customFitGrading.adjustments.bust_delta_cm},{l:'Waist',s:customFitGrading.sample_finished.waist_cm,c:customFitGrading.custom_finished.waist_cm,d:customFitGrading.adjustments.waist_delta_cm},{l:'Hip',s:customFitGrading.sample_finished.hip_cm,c:customFitGrading.custom_finished.hip_cm,d:customFitGrading.adjustments.hip_delta_cm},{l:'Length',s:customFitGrading.sample_finished.full_length_cm,c:customFitGrading.custom_finished.full_length_cm,d:customFitGrading.adjustments.length_delta_cm}] as r}
+									{@const tf = customFitGrading.target_finished}
+									{@const cf = customFitGrading.custom_finished}
+									<table class="tbl"><thead><tr><th></th><th>Pattern ({customFitGrading.target_size})</th><th class="tv">Custom</th><th>Delta</th></tr></thead>
+										<tbody>{#each [{l:'Bust',s:tf.bust_cm,c:cf.bust_cm,d:tf.bust_cm && cf.bust_cm ? +(cf.bust_cm - tf.bust_cm).toFixed(1) : 0},{l:'Waist',s:tf.waist_cm,c:cf.waist_cm,d:tf.waist_cm && cf.waist_cm ? +(cf.waist_cm - tf.waist_cm).toFixed(1) : 0},{l:'Hip',s:tf.hip_cm,c:cf.hip_cm,d:tf.hip_cm && cf.hip_cm ? +(cf.hip_cm - tf.hip_cm).toFixed(1) : 0},{l:'Length',s:tf.full_length_cm,c:cf.full_length_cm,d:tf.full_length_cm && cf.full_length_cm ? +(cf.full_length_cm - tf.full_length_cm).toFixed(1) : 0}] as r}
 											<tr><td class="tl">{r.l}</td><td>{r.s !== null ? `${r.s}cm` : '—'}</td><td class="tdv">{r.c !== null ? `${typeof r.c === 'number' ? r.c.toFixed(1) : r.c}cm` : '—'}</td><td class="{r.d && r.d !== 0 ? (r.d > 0 ? 'text-blue-600' : 'text-amber-600') : ''}">{r.d !== null ? `${r.d > 0 ? '+' : ''}${r.d.toFixed(1)}cm` : '—'}</td></tr>
 										{/each}</tbody>
 									</table>
