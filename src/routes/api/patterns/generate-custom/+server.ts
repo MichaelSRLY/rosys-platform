@@ -17,11 +17,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const grading = await calculateGrading(pattern_slug, { bust_cm: bust, waist_cm: waist, hip_cm: hip });
 	if (!grading) throw error(404, 'Pattern not found or missing size chart data');
 
-	// Cap scaling at +/- 25%
-	if (Math.abs(grading.scale_width - 1) > 0.25) {
+	// Cap scaling at +/- 25% (check PDF scale — relative to nearest size, not sample)
+	if (Math.abs(grading.pdf_scale_width - 1) > 0.25) {
 		return json({
 			grading,
-			error: `Adjustment too large (${((grading.scale_width - 1) * 100).toFixed(0)}%). Custom fit works best within 25% of the base pattern size.`
+			error: `Adjustment too large (${((grading.pdf_scale_width - 1) * 100).toFixed(0)}%). Custom fit works best within 25% of the nearest standard size.`
 		});
 	}
 
@@ -38,13 +38,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const patternName = patterns[0]?.pattern_name || pattern_slug;
 	const customLabel = `CUSTOM (bust ${bust}, waist ${waist}, hip ${hip})`;
 
-	console.log(`[custom-fit] Generating for ${pattern_slug}: size=${grading.target_size} scaleW=${grading.scale_width} scaleH=${grading.scale_height}`);
+	console.log(`[custom-fit] Generating for ${pattern_slug}: size=${grading.target_size} dxfScale=${grading.scale_width}x${grading.scale_height} pdfScale=${grading.pdf_scale_width}x${grading.pdf_scale_height}`);
 
 	try {
 		const files = await generateCustomPatternFiles(
 			pattern_slug,
 			patternName,
 			{ width: grading.scale_width, height: grading.scale_height },
+			{ width: grading.pdf_scale_width, height: grading.pdf_scale_height },
 			customLabel,
 			grading.target_size // extract this size first, then scale
 		);

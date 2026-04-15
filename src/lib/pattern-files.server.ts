@@ -259,7 +259,8 @@ async function extractSingleSizePdf(
 export async function generateCustomPatternFiles(
 	patternSlug: string,
 	patternName: string,
-	scale: ScaleFactors,
+	dxfScale: ScaleFactors,
+	pdfScale: ScaleFactors,
 	customLabel: string,
 	baseSize?: string
 ): Promise<PatternFile[]> {
@@ -283,7 +284,7 @@ export async function generateCustomPatternFiles(
 			if (file.format === 'dxf') {
 				const raw = await downloadFile(file.path);
 				const text = new TextDecoder().decode(raw);
-				const scaled = scaleDxf(text, scale, customLabel);
+				const scaled = scaleDxf(text, dxfScale, customLabel);
 				results.push({
 					format: 'dxf',
 					label: formatLabels.dxf,
@@ -311,7 +312,7 @@ export async function generateCustomPatternFiles(
 					console.log(`[custom-fit] Using full multi-size PDF (${pdfBytes.length} bytes)`);
 				}
 
-				const scaled = await scalePdf(pdfBytes, scale, baseSize || 'M');
+				const scaled = await scalePdf(pdfBytes, pdfScale, baseSize || 'M');
 				results.push({
 					format: file.format as PatternFile['format'],
 					label: formatLabels[file.format] || file.format,
@@ -335,7 +336,7 @@ export async function generateCustomDxfFile(
 	scale: ScaleFactors,
 	customLabel: string
 ): Promise<PatternFile> {
-	const files = await generateCustomPatternFiles(patternSlug, patternName, scale, customLabel, undefined);
+	const files = await generateCustomPatternFiles(patternSlug, patternName, scale, scale, customLabel, undefined);
 	const dxf = files.find(f => f.format === 'dxf');
 	if (!dxf) throw new Error(`No DXF file found for ${patternSlug}`);
 	return dxf;

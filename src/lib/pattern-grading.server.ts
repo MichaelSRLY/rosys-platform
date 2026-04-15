@@ -16,8 +16,10 @@ export interface GradingResult {
 	pattern_slug: string;
 	sample_size: string;
 	target_size: string; // nearest standard size
-	scale_width: number; // horizontal scale factor
-	scale_height: number; // vertical scale factor
+	scale_width: number; // horizontal scale factor (from sample size, for DXF)
+	scale_height: number; // vertical scale factor (from sample size, for DXF)
+	pdf_scale_width: number; // horizontal scale factor (from target size, for PDF)
+	pdf_scale_height: number; // vertical scale factor (from target size, for PDF)
 	adjustments: {
 		bust_delta_cm: number;
 		waist_delta_cm: number;
@@ -137,18 +139,21 @@ export async function calculateGrading(
 		full_length_cm: targetFinished?.full_length_cm ? Number(targetFinished.full_length_cm) : null
 	};
 
-	// Calculate scale factors relative to the sample size DXF
+	// Scale factors relative to sample size (for DXF — DXF is in sample size)
 	const sampleBust = sampleFinished.bust_cm ? Number(sampleFinished.bust_cm) : null;
 	const sampleLength = sampleFinished.full_length_cm ? Number(sampleFinished.full_length_cm) : null;
-
-	// Width scale = custom bust / sample bust (applied to x-coordinates)
 	const scaleWidth = sampleBust ? customFinished.bust_cm / sampleBust : 1;
-
-	// Height scale = custom length / sample length (applied to y-coordinates)
-	// If no length data, use a proportional estimate from bust ratio
 	const scaleHeight = sampleLength && customFinished.full_length_cm
 		? customFinished.full_length_cm / sampleLength
-		: Math.sqrt(scaleWidth); // gentle proportional scaling
+		: Math.sqrt(scaleWidth);
+
+	// Scale factors relative to target size (for PDF — we extract target size first)
+	const targetBust = targetFinished?.bust_cm ? Number(targetFinished.bust_cm) : null;
+	const targetLength = targetFinished?.full_length_cm ? Number(targetFinished.full_length_cm) : null;
+	const pdfScaleWidth = targetBust ? customFinished.bust_cm / targetBust : 1;
+	const pdfScaleHeight = targetLength && customFinished.full_length_cm
+		? customFinished.full_length_cm / targetLength
+		: Math.sqrt(pdfScaleWidth);
 
 	// Compute deltas
 	const adjustments = {
@@ -187,6 +192,8 @@ export async function calculateGrading(
 		target_size: bestSize,
 		scale_width: Math.round(scaleWidth * 10000) / 10000,
 		scale_height: Math.round(scaleHeight * 10000) / 10000,
+		pdf_scale_width: Math.round(pdfScaleWidth * 10000) / 10000,
+		pdf_scale_height: Math.round(pdfScaleHeight * 10000) / 10000,
 		adjustments,
 		sample_finished: {
 			bust_cm: sampleBust,
