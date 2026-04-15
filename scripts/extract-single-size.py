@@ -91,30 +91,31 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
             '/Export': pikepdf.Dictionary({'/ExportState': pikepdf.Name('/ON')})
         })
 
-    # Optional: apply centered scale transform for custom-fit
-    # Scales from the page center so content expands equally in all directions
-    # and nothing gets pushed off-page. All geometry (pattern lines, outlines,
-    # guides, test square) scales together so everything stays aligned.
+    # Optional: apply scale transform for custom-fit
+    # Scales from origin and EXPANDS the page (MediaBox) to fit the larger content.
+    # Pattern pieces fill the full page, so any scale > 1 needs more paper.
+    # Plotters handle non-standard sizes; tiled formats (A4/US Letter) get
+    # slightly larger tiles that printers can "fit to page" if needed.
     if scale_w is not None and scale_h is not None and (abs(scale_w - 1) > 0.001 or abs(scale_h - 1) > 0.001):
         for page in pdf.pages:
             page.contents_coalesce()
             raw = page['/Contents'].read_bytes()
 
-            # Get page dimensions for centered scaling
-            mbox = page.get('/MediaBox', [0, 0, 2383.937, 3370.394])
-            pw = float(mbox[2]) - float(mbox[0])
-            ph = float(mbox[3]) - float(mbox[1])
-            cx = pw / 2
-            cy = ph / 2
-
-            # Centered scale: translate to center, scale, translate back
-            # Matrix: [sw 0 0 sh cx*(1-sw) cy*(1-sh)]
-            tx = cx * (1 - scale_w)
-            ty = cy * (1 - scale_h)
-            prefix = f'q {scale_w:.6f} 0 0 {scale_h:.6f} {tx:.6f} {ty:.6f} cm\n'.encode('latin-1')
+            # Scale content from origin
+            prefix = f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm\n'.encode('latin-1')
             suffix = b'\nQ\n'
             page['/Contents'] = pdf.make_stream(prefix + raw + suffix)
-            print(f"  Centered scale: {scale_w:.4f}x{scale_h:.4f} on {pw:.0f}x{ph:.0f}pt page")
+
+            # Expand page dimensions to fit scaled content
+            mbox = page.get('/MediaBox', [0, 0, 2383.937, 3370.394])
+            x0, y0, x1, y1 = float(mbox[0]), float(mbox[1]), float(mbox[2]), float(mbox[3])
+            new_w = (x1 - x0) * scale_w
+            new_h = (y1 - y0) * scale_h
+            page['/MediaBox'] = pikepdf.Array([x0, y0, x0 + new_w, y0 + new_h])
+            # Update CropBox too if it exists
+            if '/CropBox' in page:
+                page['/CropBox'] = pikepdf.Array([x0, y0, x0 + new_w, y0 + new_h])
+            print(f"  Scale {scale_w:.4f}x{scale_h:.4f}, page {x1-x0:.0f}x{y1-y0:.0f} -> {new_w:.0f}x{new_h:.0f}pt")
 
     pdf.save(output_path, linearize=True)
     pdf.close()
