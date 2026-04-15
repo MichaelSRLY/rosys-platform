@@ -252,7 +252,7 @@ You have access to the FULL pattern data: what the garment looks like, how it's 
 Write your response using these EXACT markdown headers in this order:
 
 ## Recommended Size
-State the size clearly (e.g., "Size M"). Be definitive. You MUST recommend one of the AVAILABLE SIZES listed in the data. If the customer's measurements exceed the largest available size, recommend that largest size and explain that we also offer a custom-fit pattern (Beta) that adjusts the pattern to their exact body measurements — they can find it below the download buttons.
+State the size clearly (e.g., "Size M"). Be definitive. You MUST recommend one of the AVAILABLE SIZES listed in the data. If the customer's measurements would ideally need a size beyond the available range, be transparent: say which size you would have recommended (e.g., "Ideally, your measurements call for a 3XL"), explain that this pattern only goes up to [largest available size], so you're recommending that instead. Then mention that we offer a **Custom-fit pattern (Beta)** option below that takes their exact measurements and creates a pattern adjusted specifically for their body — this is the best option when standard sizes don't fully cover their measurements.
 
 ## Why This Size
 Explain using the customer's measurements against the finished garment data. Mention ease — how much room the garment gives beyond their body. Reference the garment type (fitted dress vs loose coat = different logic).
