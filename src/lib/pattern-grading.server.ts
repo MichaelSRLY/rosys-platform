@@ -148,9 +148,17 @@ export async function calculateGrading(
 		: Math.sqrt(scaleWidth);
 
 	// Scale factors relative to target size (for PDF — we extract target size first)
+	// Use the MAXIMUM ratio across bust, waist, hip so the pattern fits the user's widest point.
+	// A slightly oversized bust is easy to alter; an undersized hip means the garment won't fit.
 	const targetBust = targetFinished?.bust_cm ? Number(targetFinished.bust_cm) : null;
+	const targetWaist = targetFinished?.waist_cm ? Number(targetFinished.waist_cm) : null;
+	const targetHip = targetFinished?.hip_cm ? Number(targetFinished.hip_cm) : null;
 	const targetLength = targetFinished?.full_length_cm ? Number(targetFinished.full_length_cm) : null;
-	const pdfScaleWidth = targetBust ? customFinished.bust_cm / targetBust : 1;
+
+	const bustRatio = targetBust ? customFinished.bust_cm / targetBust : 1;
+	const waistRatio = targetWaist ? customFinished.waist_cm / targetWaist : 1;
+	const hipRatio = targetHip ? customFinished.hip_cm / targetHip : 1;
+	const pdfScaleWidth = Math.max(bustRatio, waistRatio, hipRatio);
 	const pdfScaleHeight = targetLength && customFinished.full_length_cm
 		? customFinished.full_length_cm / targetLength
 		: Math.sqrt(pdfScaleWidth);
