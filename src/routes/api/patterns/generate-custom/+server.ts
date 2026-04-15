@@ -38,6 +38,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const patternName = patterns[0]?.pattern_name || pattern_slug;
 	const customLabel = `CUSTOM (bust ${bust}, waist ${waist}, hip ${hip})`;
 
+	console.log(`[custom-fit] Generating for ${pattern_slug}: size=${grading.target_size} scaleW=${grading.scale_width} scaleH=${grading.scale_height}`);
+
 	try {
 		const files = await generateCustomPatternFiles(
 			pattern_slug,
