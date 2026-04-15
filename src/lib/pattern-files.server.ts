@@ -295,13 +295,19 @@ export async function generateCustomPatternFiles(
 				let pdfBytes: Uint8Array | null = null;
 
 				if (baseSize) {
-					// Try single-size extraction (color filtering)
+					// Extract single size first (OCG layer toggle)
+					console.log(`[custom-fit] Extracting single size ${baseSize} for ${patternSlug}/${file.format}`);
 					pdfBytes = await extractSingleSizePdf(patternSlug, baseSize, file.format);
+					if (pdfBytes) {
+						console.log(`[custom-fit] Single-size extraction OK (${pdfBytes.length} bytes)`);
+					} else {
+						console.warn(`[custom-fit] Single-size extraction FAILED, using full multi-size PDF`);
+					}
 				}
 
 				if (!pdfBytes) {
-					// Fallback: use the full multi-size PDF (all lines visible)
 					pdfBytes = await downloadFile(file.path);
+					console.log(`[custom-fit] Using full multi-size PDF (${pdfBytes.length} bytes)`);
 				}
 
 				const scaled = await scalePdf(pdfBytes, scale);
