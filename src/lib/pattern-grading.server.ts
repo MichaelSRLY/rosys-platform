@@ -147,20 +147,21 @@ export async function calculateGrading(
 		? customFinished.full_length_cm / sampleLength
 		: Math.sqrt(scaleWidth);
 
+	// Compute effective target finished measurements (with body+ease fallback for nulls)
+	// These are used for both ratio calculation and the return value.
+	const effTargetBust = targetFinished?.bust_cm ? Number(targetFinished.bust_cm) : (targetBody?.bust_cm ? Number(targetBody.bust_cm) + bustEase : null);
+	const effTargetWaist = targetFinished?.waist_cm ? Number(targetFinished.waist_cm) : (targetBody?.waist_cm ? Number(targetBody.waist_cm) + waistEase : null);
+	const effTargetHip = targetFinished?.hip_cm ? Number(targetFinished.hip_cm) : (targetBody?.hip_cm ? Number(targetBody.hip_cm) + hipEase : null);
+	const effTargetLength = targetFinished?.full_length_cm ? Number(targetFinished.full_length_cm) : null;
+
 	// Scale factors relative to target size (for PDF — we extract target size first)
 	// Use the MAXIMUM ratio across bust, waist, hip so the pattern fits the user's widest point.
-	// A slightly oversized bust is easy to alter; an undersized hip means the garment won't fit.
-	const targetBust = targetFinished?.bust_cm ? Number(targetFinished.bust_cm) : null;
-	const targetWaist = targetFinished?.waist_cm ? Number(targetFinished.waist_cm) : null;
-	const targetHip = targetFinished?.hip_cm ? Number(targetFinished.hip_cm) : null;
-	const targetLength = targetFinished?.full_length_cm ? Number(targetFinished.full_length_cm) : null;
-
-	const bustRatio = targetBust ? customFinished.bust_cm / targetBust : 1;
-	const waistRatio = targetWaist ? customFinished.waist_cm / targetWaist : 1;
-	const hipRatio = targetHip ? customFinished.hip_cm / targetHip : 1;
+	const bustRatio = effTargetBust ? customFinished.bust_cm / effTargetBust : 1;
+	const waistRatio = effTargetWaist ? customFinished.waist_cm / effTargetWaist : 1;
+	const hipRatio = effTargetHip ? customFinished.hip_cm / effTargetHip : 1;
 	const pdfScaleWidth = Math.max(bustRatio, waistRatio, hipRatio);
-	const pdfScaleHeight = targetLength && customFinished.full_length_cm
-		? customFinished.full_length_cm / targetLength
+	const pdfScaleHeight = effTargetLength && customFinished.full_length_cm
+		? customFinished.full_length_cm / effTargetLength
 		: Math.sqrt(pdfScaleWidth);
 
 	// Compute deltas
@@ -210,10 +211,10 @@ export async function calculateGrading(
 			full_length_cm: sampleLength
 		},
 		target_finished: {
-			bust_cm: targetFinished?.bust_cm ? Number(targetFinished.bust_cm) : (targetBody?.bust_cm ? Number(targetBody.bust_cm) + bustEase : null),
-			waist_cm: targetFinished?.waist_cm ? Number(targetFinished.waist_cm) : (targetBody?.waist_cm ? Number(targetBody.waist_cm) + waistEase : null),
-			hip_cm: targetFinished?.hip_cm ? Number(targetFinished.hip_cm) : (targetBody?.hip_cm ? Number(targetBody.hip_cm) + hipEase : null),
-			full_length_cm: targetFinished?.full_length_cm ? Number(targetFinished.full_length_cm) : null
+			bust_cm: effTargetBust,
+			waist_cm: effTargetWaist,
+			hip_cm: effTargetHip,
+			full_length_cm: effTargetLength
 		},
 		custom_finished: customFinished,
 		confidence,
