@@ -120,7 +120,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				const prompt = buildPrompt(
 					bust, waist, hip, height, match, chart,
 					patternInfo[0]?.pattern_name || pattern_slug,
-					source, profile, patternContext, preferences, previous_recommendation
+					source, profile, patternContext, preferences, previous_recommendation, hasDxf
 				);
 
 				const apiKey = env.ANTHROPIC_API_KEY;
@@ -316,7 +316,7 @@ function buildPrompt(
 	bust: number, waist: number, hip: number, height: number | undefined,
 	match: any, chart: any, patternName: string, source: string,
 	profile: any, patternContext: Record<string, string[]>,
-	preferences?: any, previousRecommendation?: string
+	preferences?: any, previousRecommendation?: string, hasDxf?: boolean
 ): string {
 	// Check if body chart has data
 	const hasBodyData = chart.body.some((r: any) => r.bust_cm !== null);
