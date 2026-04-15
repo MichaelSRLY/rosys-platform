@@ -84,26 +84,62 @@ def scale_pattern(input_path, scale_w, scale_h, target_size, output_path):
         layers_on = 0
         layers_off = 0
 
-    # --- Step 2: Apply scale transform + expand page ---
-    # Scales from origin and expands MediaBox to fit the larger content.
+    # --- Step 2: Scale ONLY size layers, not Layer 1 ---
+    # Scales cutting lines inside size BDC/EMC blocks only.
+    # Labels, test square, and pattern outlines (Layer 1) stay untouched.
+    # Page stays at standard size (A0/A4/US Letter).
     if abs(scale_w - 1) > 0.001 or abs(scale_h - 1) > 0.001:
         for page in pdf.pages:
             page.contents_coalesce()
             raw = page['/Contents'].read_bytes()
 
-            prefix = f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm\n'.encode('latin-1')
-            suffix = b'\nQ\n'
-            page['/Contents'] = pdf.make_stream(prefix + raw + suffix)
+            # Find which /MCn references are SIZE layers
+            props = page.get('/Resources', pikepdf.Dictionary()).get('/Properties', pikepdf.Dictionary())
+            size_mc_refs = set()
+            for mc_key in props.keys():
+                mc_name = str(mc_key).lstrip('/')
+                try:
+                    ocg_name = str(props[mc_key].get('/Name', '')).upper()
+                    if ocg_name in SIZE_NAMES:
+                        size_mc_refs.add(mc_name)
+                except Exception:
+                    pass
 
-            # Expand page to fit scaled content
-            mbox = page.get('/MediaBox', [0, 0, 2383.937, 3370.394])
-            x0, y0, x1, y1 = float(mbox[0]), float(mbox[1]), float(mbox[2]), float(mbox[3])
-            new_w = (x1 - x0) * scale_w
-            new_h = (y1 - y0) * scale_h
-            page['/MediaBox'] = pikepdf.Array([x0, y0, x0 + new_w, y0 + new_h])
-            if '/CropBox' in page:
-                page['/CropBox'] = pikepdf.Array([x0, y0, x0 + new_w, y0 + new_h])
-            print(f"  Scale {scale_w:.4f}x{scale_h:.4f}, page {x1-x0:.0f}x{y1-y0:.0f} -> {new_w:.0f}x{new_h:.0f}pt")
+            if not size_mc_refs:
+                # Fallback: scale everything
+                prefix = f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm\n'.encode('latin-1')
+                suffix = b'\nQ\n'
+                page['/Contents'] = pdf.make_stream(prefix + raw + suffix)
+                continue
+
+            content = raw.decode('latin-1')
+            lines = content.split('\n')
+            output = []
+            bdc_stack = []
+
+            for line in lines:
+                s = line.strip()
+
+                if s.endswith('BDC'):
+                    is_size = any(f'/{mc} ' in s or f'/{mc} BDC' in s for mc in size_mc_refs)
+                    bdc_stack.append(is_size)
+                    output.append(line)
+                    if is_size:
+                        output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm')
+                    continue
+
+                if s == 'EMC':
+                    if bdc_stack:
+                        was_size = bdc_stack.pop()
+                        if was_size:
+                            output.append('Q')
+                    output.append(line)
+                    continue
+
+                output.append(line)
+
+            page['/Contents'] = pdf.make_stream('\n'.join(output).encode('latin-1'))
+            print(f"  Scaled size layers only ({', '.join(sorted(size_mc_refs))}), Layer 1 untouched")
 
     pdf.save(output_path, linearize=True)
     pdf.close()

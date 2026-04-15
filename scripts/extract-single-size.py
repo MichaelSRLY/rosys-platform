@@ -92,30 +92,65 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
         })
 
     # Optional: apply scale transform for custom-fit
-    # Scales from origin and EXPANDS the page (MediaBox) to fit the larger content.
-    # Pattern pieces fill the full page, so any scale > 1 needs more paper.
-    # Plotters handle non-standard sizes; tiled formats (A4/US Letter) get
-    # slightly larger tiles that printers can "fit to page" if needed.
+    # Scales ONLY the target size layer (cutting lines), NOT Layer 1 (labels,
+    # test square, outlines). Page stays at standard size (A0/A4/US Letter).
+    # The customer follows the scaled cutting line; Layer 1 outlines are just
+    # reference borders for the standard size.
     if scale_w is not None and scale_h is not None and (abs(scale_w - 1) > 0.001 or abs(scale_h - 1) > 0.001):
+        size_names_upper = {s.upper() for s in ALL_SIZES}
+
         for page in pdf.pages:
             page.contents_coalesce()
             raw = page['/Contents'].read_bytes()
 
-            # Scale content from origin
-            prefix = f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm\n'.encode('latin-1')
-            suffix = b'\nQ\n'
-            page['/Contents'] = pdf.make_stream(prefix + raw + suffix)
+            # Find which /MCn references are SIZE layers (not Layer 1/labels)
+            props = page.get('/Resources', pikepdf.Dictionary()).get('/Properties', pikepdf.Dictionary())
+            size_mc_refs = set()
+            for mc_key in props.keys():
+                mc_name = str(mc_key).lstrip('/')
+                try:
+                    ocg_name = str(props[mc_key].get('/Name', '')).upper()
+                    if ocg_name in size_names_upper:
+                        size_mc_refs.add(mc_name)
+                except Exception:
+                    pass
 
-            # Expand page dimensions to fit scaled content
-            mbox = page.get('/MediaBox', [0, 0, 2383.937, 3370.394])
-            x0, y0, x1, y1 = float(mbox[0]), float(mbox[1]), float(mbox[2]), float(mbox[3])
-            new_w = (x1 - x0) * scale_w
-            new_h = (y1 - y0) * scale_h
-            page['/MediaBox'] = pikepdf.Array([x0, y0, x0 + new_w, y0 + new_h])
-            # Update CropBox too if it exists
-            if '/CropBox' in page:
-                page['/CropBox'] = pikepdf.Array([x0, y0, x0 + new_w, y0 + new_h])
-            print(f"  Scale {scale_w:.4f}x{scale_h:.4f}, page {x1-x0:.0f}x{y1-y0:.0f} -> {new_w:.0f}x{new_h:.0f}pt")
+            if not size_mc_refs:
+                # Fallback: scale everything if we can't identify OCG layers
+                prefix = f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm\n'.encode('latin-1')
+                suffix = b'\nQ\n'
+                page['/Contents'] = pdf.make_stream(prefix + raw + suffix)
+                continue
+
+            # Parse content stream, insert scale only inside size BDC/EMC blocks
+            content = raw.decode('latin-1')
+            lines = content.split('\n')
+            output = []
+            bdc_stack = []  # True if this BDC level is a size layer
+
+            for line in lines:
+                s = line.strip()
+
+                if s.endswith('BDC'):
+                    is_size = any(f'/{mc} ' in s or f'/{mc} BDC' in s for mc in size_mc_refs)
+                    bdc_stack.append(is_size)
+                    output.append(line)
+                    if is_size:
+                        output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm')
+                    continue
+
+                if s == 'EMC':
+                    if bdc_stack:
+                        was_size = bdc_stack.pop()
+                        if was_size:
+                            output.append('Q')
+                    output.append(line)
+                    continue
+
+                output.append(line)
+
+            page['/Contents'] = pdf.make_stream('\n'.join(output).encode('latin-1'))
+            print(f"  Scaled size layers only ({', '.join(sorted(size_mc_refs))}), Layer 1 untouched")
 
     pdf.save(output_path, linearize=True)
     pdf.close()
