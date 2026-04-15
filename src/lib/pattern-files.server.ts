@@ -107,11 +107,13 @@ async function scalePdf(
 	try {
 		await fsWrite(inputPath, Buffer.from(pdfBytes));
 		const scriptPath = join(process.cwd(), 'scripts', 'scale-pattern.py');
-		await execAsync(
-			`python3 "${scriptPath}" "${inputPath}" ${scale.width} ${scale.height} "${targetSize}" "${outputPath}"`,
-			{ timeout: 30000 }
-		);
+		const cmd = `python3 "${scriptPath}" "${inputPath}" ${scale.width} ${scale.height} "${targetSize}" "${outputPath}"`;
+		console.log(`[custom-fit] Running: scale W=${scale.width} H=${scale.height} size=${targetSize}`);
+		const { stdout, stderr } = await execAsync(cmd, { timeout: 30000 });
+		if (stdout) console.log(`[custom-fit] Scale output: ${stdout.trim()}`);
+		if (stderr) console.error(`[custom-fit] Scale error: ${stderr.trim()}`);
 		const outputBuffer = await fsRead(outputPath);
+		console.log(`[custom-fit] Scaled PDF: ${pdfBytes.length} -> ${outputBuffer.length} bytes`);
 		return new Uint8Array(outputBuffer);
 	} finally {
 		await fsUnlink(inputPath).catch(() => {});
