@@ -82,7 +82,8 @@
 	const canSubmit = $derived(!!(bust && waist && hip));
 	function extractSizeFromText(text: string): string | null {
 		if (!text) return null;
-		const m = text.match(/Size\s+([A-Z0-9]{1,4})\b/i);
+		const validSizes = ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
+		const m = text.match(/Size\s+(XXS|XS|S|M|L|XL|2XL|3XL|4XL|5XL)\b/i);
 		return m ? m[1].toUpperCase() : null;
 	}
 	const aiSize = $derived(extractSizeFromText(refinedText) ?? extractSizeFromText(streamedText));
