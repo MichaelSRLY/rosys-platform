@@ -187,24 +187,27 @@ function scaleDxf(
 }
 
 /**
- * Extract a single-size PDF by calling the single-size extraction endpoint.
- * This uses the Python pikepdf color-filtering logic to remove all other size lines.
+ * Extract a single-size PDF using Python pikepdf OCG layer toggling.
+ * Optionally applies a scale transform for custom-fit patterns.
  */
 async function extractSingleSizePdf(
 	slug: string,
 	size: string,
-	format: string
+	format: string,
+	scale?: ScaleFactors
 ): Promise<Uint8Array | null> {
 	const admin = getAdmin();
 
-	// Check cache first
+	// Check cache first (only for unscaled single-size exports)
 	const cachePath = `${slug}/single-size/${size}/${format}.pdf`;
-	const { data: cached } = await admin.storage
-		.from('pattern-files')
-		.download(cachePath);
+	if (!scale) {
+		const { data: cached } = await admin.storage
+			.from('pattern-files')
+			.download(cachePath);
 
-	if (cached) {
-		return new Uint8Array(await cached.arrayBuffer());
+		if (cached) {
+			return new Uint8Array(await cached.arrayBuffer());
+		}
 	}
 
 	// Not cached — try to extract using Python script
@@ -232,11 +235,15 @@ async function extractSingleSizePdf(
 		try {
 			await fsWrite(inputPath, Buffer.from(await original.arrayBuffer()));
 			const scriptPath = join(process.cwd(), 'scripts', 'extract-single-size.py');
-			await execAsync(`python3 "${scriptPath}" "${inputPath}" "${size}" "${outputPath}"`, { timeout: 30000 });
+			const scaleArgs = scale ? ` --scale-w ${scale.width} --scale-h ${scale.height}` : '';
+			console.log(`[extract] Running: size=${size} format=${format}${scaleArgs}`);
+			await execAsync(`python3 "${scriptPath}" "${inputPath}" "${size}" "${outputPath}"${scaleArgs}`, { timeout: 30000 });
 			const outputBuffer = await fsRead(outputPath);
 
-			// Cache for next time
-			await admin.storage.from('pattern-files').upload(cachePath, outputBuffer, { contentType: 'application/pdf', upsert: true });
+			// Cache only unscaled single-size exports
+			if (!scale) {
+				await admin.storage.from('pattern-files').upload(cachePath, outputBuffer, { contentType: 'application/pdf', upsert: true });
+			}
 
 			return new Uint8Array(outputBuffer);
 		} finally {
@@ -295,26 +302,24 @@ export async function generateCustomPatternFiles(
 					mimeType: 'application/dxf'
 				});
 			} else {
-				// PDF: first extract single size, then scale
+				// PDF: extract single size + apply scale in one Python call
 				let pdfBytes: Uint8Array | null = null;
 
 				if (baseSize) {
-					// Extract single size first (OCG layer toggle)
-					console.log(`[custom-fit] Extracting single size ${baseSize} for ${patternSlug}/${file.format}`);
-					pdfBytes = await extractSingleSizePdf(patternSlug, baseSize, file.format);
+					console.log(`[custom-fit] Extracting+scaling ${baseSize} for ${patternSlug}/${file.format} (W=${pdfScale.width} H=${pdfScale.height})`);
+					pdfBytes = await extractSingleSizePdf(patternSlug, baseSize, file.format, pdfScale);
 					if (pdfBytes) {
-						console.log(`[custom-fit] Single-size extraction OK (${pdfBytes.length} bytes)`);
+						console.log(`[custom-fit] Extract+scale OK (${pdfBytes.length} bytes)`);
 					} else {
-						console.warn(`[custom-fit] Single-size extraction FAILED, using full multi-size PDF`);
+						console.warn(`[custom-fit] Extract+scale FAILED`);
 					}
 				}
 
 				if (!pdfBytes) {
 					pdfBytes = await downloadFile(file.path);
-					console.log(`[custom-fit] Using full multi-size PDF (${pdfBytes.length} bytes)`);
 				}
 
-				const scaled = await scalePdf(pdfBytes, pdfScale, baseSize || 'M');
+				const scaled = pdfBytes;
 				results.push({
 					format: file.format as PatternFile['format'],
 					label: formatLabels[file.format] || file.format,

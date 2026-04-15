@@ -20,7 +20,7 @@ import pikepdf
 ALL_SIZES = ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL']
 
 
-def extract_single_size(input_path, target_size, output_path):
+def extract_single_size(input_path, target_size, output_path, scale_w=None, scale_h=None):
     pdf = pikepdf.open(input_path)
 
     oc_props = pdf.Root.get('/OCProperties')
@@ -91,6 +91,15 @@ def extract_single_size(input_path, target_size, output_path):
             '/Export': pikepdf.Dictionary({'/ExportState': pikepdf.Name('/ON')})
         })
 
+    # Optional: apply scale transform for custom-fit
+    if scale_w is not None and scale_h is not None:
+        for page in pdf.pages:
+            page.contents_coalesce()
+            raw = page['/Contents'].read_bytes()
+            prefix = f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm\n'.encode('latin-1')
+            suffix = b'\nQ\n'
+            page['/Contents'] = pdf.make_stream(prefix + raw + suffix)
+
     pdf.save(output_path, linearize=True)
     pdf.close()
 
@@ -102,6 +111,8 @@ def main():
     parser.add_argument('input', help='Input multi-size PDF')
     parser.add_argument('size', help='Target size (XXS, XS, S, M, L, XL, 2XL, 3XL, 4XL, 5XL)')
     parser.add_argument('output', nargs='?', help='Output PDF path')
+    parser.add_argument('--scale-w', type=float, default=None, help='Width scale factor for custom-fit')
+    parser.add_argument('--scale-h', type=float, default=None, help='Height scale factor for custom-fit')
     args = parser.parse_args()
 
     size = args.size.upper()
@@ -113,7 +124,9 @@ def main():
     output = args.output or args.input.replace('.pdf', f'_{size}.pdf')
 
     print(f"Extracting size {size} from {args.input}")
-    on, off = extract_single_size(args.input, size, output)
+    if args.scale_w and args.scale_h:
+        print(f"Custom-fit scaling: W*{args.scale_w:.4f} H*{args.scale_h:.4f}")
+    on, off = extract_single_size(args.input, size, output, args.scale_w, args.scale_h)
     print(f"Done: {on} layers ON, {off} layers OFF")
     print(f"Output: {output}")
 
