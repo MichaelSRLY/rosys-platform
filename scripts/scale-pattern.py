@@ -84,22 +84,61 @@ def scale_pattern(input_path, scale_w, scale_h, target_size, output_path):
         layers_on = 0
         layers_off = 0
 
-    # --- Step 2: Apply scale transform to each page ---
-    # Prepend a scale transform to the page content.
-    # This scales ALL content (including fixed elements like test square).
-    # The tradeoff: test square scales too, but the PDF is valid and
-    # opens without errors in Adobe.
-    for page in pdf.pages:
-        # Coalesce multiple content streams into one
-        page.contents_coalesce()
+    # --- Step 2: Apply scale transform ONLY to size OCG layers ---
+    # Scales pattern lines inside BDC/EMC blocks for size layers.
+    # Text labels, test square, and page numbers remain at original size.
+    if abs(scale_w - 1) > 0.001 or abs(scale_h - 1) > 0.001:
+        for page in pdf.pages:
+            page.contents_coalesce()
+            raw = page['/Contents'].read_bytes()
 
-        # Prepend scale transform: wrap existing content in q/cm/Q
-        scale_prefix = f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm\n'
-        scale_suffix = '\nQ\n'
+            # Find which /MCn references are SIZE layers
+            props = page.get('/Resources', pikepdf.Dictionary()).get('/Properties', pikepdf.Dictionary())
+            size_mc_refs = set()
+            for mc_key in props.keys():
+                mc_name = str(mc_key).lstrip('/')
+                try:
+                    ocg_name = str(props[mc_key].get('/Name', '')).upper()
+                    if ocg_name in SIZE_NAMES:
+                        size_mc_refs.add(mc_name)
+                except Exception:
+                    pass
 
-        raw = page['/Contents'].read_bytes()
-        new_content = scale_prefix.encode('latin-1') + raw + scale_suffix.encode('latin-1')
-        page['/Contents'] = pdf.make_stream(new_content)
+            if not size_mc_refs:
+                # Fallback: scale everything
+                prefix = f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm\n'.encode('latin-1')
+                suffix = b'\nQ\n'
+                page['/Contents'] = pdf.make_stream(prefix + raw + suffix)
+                continue
+
+            content = raw.decode('latin-1')
+            lines = content.split('\n')
+            output = []
+            bdc_stack = []
+
+            for line in lines:
+                s = line.strip()
+
+                if s.endswith('BDC'):
+                    is_size = any(f'/{mc} ' in s or s.endswith(f'/{mc} BDC') or f'/{mc}\n' in line for mc in size_mc_refs)
+                    bdc_stack.append(is_size)
+                    output.append(line)
+                    if is_size:
+                        output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm')
+                    continue
+
+                if s == 'EMC':
+                    if bdc_stack:
+                        was_size = bdc_stack.pop()
+                        if was_size:
+                            output.append('Q')
+                    output.append(line)
+                    continue
+
+                output.append(line)
+
+            page['/Contents'] = pdf.make_stream('\n'.join(output).encode('latin-1'))
+            print(f"  Scaled {len(size_mc_refs)} size layers, left labels/text untouched")
 
     pdf.save(output_path, linearize=True)
     pdf.close()
