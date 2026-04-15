@@ -197,16 +197,16 @@ export async function calculateGrading(
 		adjustments,
 		sample_finished: {
 			bust_cm: sampleBust,
-			waist_cm: sampleFinished.waist_cm ? Number(sampleFinished.waist_cm) : null,
-			hip_cm: sampleFinished.hip_cm ? Number(sampleFinished.hip_cm) : null,
+			waist_cm: sampleFinished.waist_cm ? Number(sampleFinished.waist_cm) : (bodyRows.find(r => r.size === sampleSize)?.waist_cm ? Number(bodyRows.find(r => r.size === sampleSize)!.waist_cm) + waistEase : null),
+			hip_cm: sampleFinished.hip_cm ? Number(sampleFinished.hip_cm) : (bodyRows.find(r => r.size === sampleSize)?.hip_cm ? Number(bodyRows.find(r => r.size === sampleSize)!.hip_cm) + hipEase : null),
 			full_length_cm: sampleLength
 		},
-		target_finished: targetFinished ? {
-			bust_cm: targetFinished.bust_cm ? Number(targetFinished.bust_cm) : null,
-			waist_cm: targetFinished.waist_cm ? Number(targetFinished.waist_cm) : null,
-			hip_cm: targetFinished.hip_cm ? Number(targetFinished.hip_cm) : null,
-			full_length_cm: targetFinished.full_length_cm ? Number(targetFinished.full_length_cm) : null
-		} : { bust_cm: null, waist_cm: null, hip_cm: null, full_length_cm: null },
+		target_finished: {
+			bust_cm: targetFinished?.bust_cm ? Number(targetFinished.bust_cm) : (targetBody?.bust_cm ? Number(targetBody.bust_cm) + bustEase : null),
+			waist_cm: targetFinished?.waist_cm ? Number(targetFinished.waist_cm) : (targetBody?.waist_cm ? Number(targetBody.waist_cm) + waistEase : null),
+			hip_cm: targetFinished?.hip_cm ? Number(targetFinished.hip_cm) : (targetBody?.hip_cm ? Number(targetBody.hip_cm) + hipEase : null),
+			full_length_cm: targetFinished?.full_length_cm ? Number(targetFinished.full_length_cm) : null
+		},
 		custom_finished: customFinished,
 		confidence,
 		warnings
