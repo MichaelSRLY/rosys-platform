@@ -91,65 +91,30 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
             '/Export': pikepdf.Dictionary({'/ExportState': pikepdf.Name('/ON')})
         })
 
-    # Optional: apply scale transform for custom-fit
-    # Only scales content INSIDE size OCG layers (BDC/EMC blocks).
-    # Text labels, test square, and page numbers remain at original size.
+    # Optional: apply centered scale transform for custom-fit
+    # Scales from the page center so content expands equally in all directions
+    # and nothing gets pushed off-page. All geometry (pattern lines, outlines,
+    # guides, test square) scales together so everything stays aligned.
     if scale_w is not None and scale_h is not None and (abs(scale_w - 1) > 0.001 or abs(scale_h - 1) > 0.001):
-        import re as _re
-        size_names_upper = {s.upper() for s in ALL_SIZES}
-
         for page in pdf.pages:
             page.contents_coalesce()
             raw = page['/Contents'].read_bytes()
 
-            # Find which /MCn references are SIZE layers (not page numbers etc.)
-            props = page.get('/Resources', pikepdf.Dictionary()).get('/Properties', pikepdf.Dictionary())
-            size_mc_refs = set()
-            for mc_key in props.keys():
-                mc_name = str(mc_key).lstrip('/')
-                try:
-                    ocg_name = str(props[mc_key].get('/Name', '')).upper()
-                    if ocg_name in size_names_upper:
-                        size_mc_refs.add(mc_name)
-                except Exception:
-                    pass
+            # Get page dimensions for centered scaling
+            mbox = page.get('/MediaBox', [0, 0, 2383.937, 3370.394])
+            pw = float(mbox[2]) - float(mbox[0])
+            ph = float(mbox[3]) - float(mbox[1])
+            cx = pw / 2
+            cy = ph / 2
 
-            if not size_mc_refs:
-                # Fallback: scale everything if we can't identify OCG layers
-                prefix = f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm\n'.encode('latin-1')
-                suffix = b'\nQ\n'
-                page['/Contents'] = pdf.make_stream(prefix + raw + suffix)
-                continue
-
-            # Parse content stream line by line, insert scale only inside size BDC/EMC blocks
-            content = raw.decode('latin-1')
-            lines = content.split('\n')
-            output = []
-            bdc_stack = []  # True if this BDC level is a size layer
-
-            for line in lines:
-                s = line.strip()
-
-                if s.endswith('BDC'):
-                    is_size = any(f'/{mc} ' in s or s.endswith(f'/{mc} BDC') or f'/{mc}\n' in line for mc in size_mc_refs)
-                    bdc_stack.append(is_size)
-                    output.append(line)
-                    if is_size:
-                        output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm')
-                    continue
-
-                if s == 'EMC':
-                    if bdc_stack:
-                        was_size = bdc_stack.pop()
-                        if was_size:
-                            output.append('Q')
-                    output.append(line)
-                    continue
-
-                output.append(line)
-
-            page['/Contents'] = pdf.make_stream('\n'.join(output).encode('latin-1'))
-            print(f"  Scaled {len(size_mc_refs)} size layers, left labels/text untouched")
+            # Centered scale: translate to center, scale, translate back
+            # Matrix: [sw 0 0 sh cx*(1-sw) cy*(1-sh)]
+            tx = cx * (1 - scale_w)
+            ty = cy * (1 - scale_h)
+            prefix = f'q {scale_w:.6f} 0 0 {scale_h:.6f} {tx:.6f} {ty:.6f} cm\n'.encode('latin-1')
+            suffix = b'\nQ\n'
+            page['/Contents'] = pdf.make_stream(prefix + raw + suffix)
+            print(f"  Centered scale: {scale_w:.4f}x{scale_h:.4f} on {pw:.0f}x{ph:.0f}pt page")
 
     pdf.save(output_path, linearize=True)
     pdf.close()
