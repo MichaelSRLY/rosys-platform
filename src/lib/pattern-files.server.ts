@@ -90,6 +90,7 @@ async function downloadFile(path: string): Promise<Uint8Array> {
 async function scalePdf(
 	pdfBytes: Uint8Array,
 	scale: ScaleFactors,
+	targetSize: string,
 ): Promise<Uint8Array> {
 	const { exec } = await import('child_process');
 	const { promisify } = await import('util');
@@ -107,7 +108,7 @@ async function scalePdf(
 		await fsWrite(inputPath, Buffer.from(pdfBytes));
 		const scriptPath = join(process.cwd(), 'scripts', 'scale-pattern.py');
 		await execAsync(
-			`python3 "${scriptPath}" "${inputPath}" ${scale.width} ${scale.height} "${outputPath}"`,
+			`python3 "${scriptPath}" "${inputPath}" ${scale.width} ${scale.height} "${targetSize}" "${outputPath}"`,
 			{ timeout: 30000 }
 		);
 		const outputBuffer = await fsRead(outputPath);
@@ -310,7 +311,7 @@ export async function generateCustomPatternFiles(
 					console.log(`[custom-fit] Using full multi-size PDF (${pdfBytes.length} bytes)`);
 				}
 
-				const scaled = await scalePdf(pdfBytes, scale);
+				const scaled = await scalePdf(pdfBytes, scale, baseSize || 'M');
 				results.push({
 					format: file.format as PatternFile['format'],
 					label: formatLabels[file.format] || file.format,

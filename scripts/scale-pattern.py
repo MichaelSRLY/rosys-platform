@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
-Scale pattern geometry in a PDF without distorting fixed elements.
+Scale pattern geometry in a PDF for custom-fit export.
 
 Optitex PDFs use OCG layers with inline BDC/EMC markers:
-  - MC0 = "Layer 1" (test square, labels, info box) - DO NOT SCALE
-  - MC1-MC7 = size layers (XXS-2XL pattern lines) - SCALE THESE
+  - MC0 = "Layer 1" (test square, labels, info box) - KEEP, DO NOT SCALE
+  - MC1-MC7 = size layers (XXS-2XL pattern lines)
 
-This script reads the MC-to-OCG mapping from page resources, identifies
-which MCs are size layers vs fixed content, and only wraps size-layer
-BDC/EMC blocks in scale transforms.
+This script:
+  1. Reads the MC-to-OCG mapping from page resources
+  2. REMOVES all non-target size BDC/EMC blocks from the content stream
+  3. Wraps the target size block in a scale transform
+  4. Keeps Layer 1 (fixed elements) untouched
 
 Usage:
-  python3 scripts/scale-pattern.py <input.pdf> <scale_w> <scale_h> <output.pdf>
+  python3 scripts/scale-pattern.py <input.pdf> <scale_w> <scale_h> <target_size> <output.pdf>
 """
 
 import argparse
@@ -22,73 +24,79 @@ import pikepdf
 SIZE_NAMES = {'XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'}
 
 
-def get_size_mc_names(page):
+def get_mc_layer_map(page):
     """
-    Read the Properties dict from page resources to find which MC names
-    map to size layers (XXS, XS, S, M, L, XL, 2XL) vs fixed layers (Layer 1).
-    Returns set of MC names that should be scaled.
+    Read the Properties dict from page resources.
+    Returns dict: MC name -> layer name (e.g. {"MC0": "Layer 1", "MC5": "L"})
     """
     resources = page.get('/Resources', pikepdf.Dictionary())
     props = resources.get('/Properties', pikepdf.Dictionary())
 
-    scale_mcs = set()
+    mc_map = {}
     for mc_key, ocg_ref in props.items():
         layer_name = ''
         if hasattr(ocg_ref, 'get'):
             layer_name = str(ocg_ref.get('/Name', ''))
-        if layer_name.upper() in SIZE_NAMES:
-            # Strip leading / from key name (e.g. "/MC5" -> "MC5")
-            scale_mcs.add(mc_key.lstrip('/'))
+        mc_map[mc_key.lstrip('/')] = layer_name
 
-    return scale_mcs
+    return mc_map
 
 
-def scale_size_blocks(raw_bytes, scale_w, scale_h, size_mcs):
+def process_content(raw_bytes, scale_w, scale_h, target_size, mc_map):
     """
-    Find BDC/EMC blocks for size layers and wrap them in scale transforms.
-    Fixed-content blocks (Layer 1) are left untouched.
+    Process the content stream:
+    - Keep non-OCG content (outside BDC/EMC) unchanged
+    - Keep Layer 1 BDC/EMC blocks unchanged
+    - Scale target size BDC/EMC block
+    - Remove all other size BDC/EMC blocks
     """
     raw = raw_bytes.decode('latin-1')
 
     scale_cmd = f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm\n'
     restore_cmd = '\nQ\n'
-    scaled_count = 0
-    skipped_count = 0
+    kept = 0
+    scaled = 0
+    removed = 0
 
-    def wrap_if_size(match):
-        nonlocal scaled_count, skipped_count
-        mc_name = match.group(1)  # e.g. "MC5"
-        bdc_full = match.group(0)[:match.end(1) - match.start(0)]
-        # Reconstruct: everything before content, content, EMC
+    def handle_block(match):
+        nonlocal kept, scaled, removed
+        mc_name = match.group(1)
         prefix = match.group(0)[:match.start(2) - match.start(0)]
         content = match.group(2)
         suffix = 'EMC'
 
-        if mc_name in size_mcs:
-            scaled_count += 1
+        layer_name = mc_map.get(mc_name, '')
+
+        if layer_name.upper() == target_size.upper():
+            # Target size: wrap in scale transform
+            scaled += 1
             return f'{prefix}{scale_cmd}{content}{restore_cmd}{suffix}'
+        elif layer_name.upper() in SIZE_NAMES:
+            # Other size: remove entirely
+            removed += 1
+            return ''
         else:
-            skipped_count += 1
-            return match.group(0)  # unchanged
+            # Fixed content (Layer 1, etc.): keep unchanged
+            kept += 1
+            return match.group(0)
 
-    # Match /OC /MCn BDC ... EMC blocks
     pattern = r'/OC\s+/(\S+)\s+BDC(.*?)EMC'
-    result = re.sub(pattern, wrap_if_size, raw, flags=re.DOTALL)
+    result = re.sub(pattern, handle_block, raw, flags=re.DOTALL)
 
-    return result.encode('latin-1'), scaled_count, skipped_count
+    return result.encode('latin-1'), scaled, kept, removed
 
 
-def scale_pattern(input_path, scale_w, scale_h, output_path):
+def scale_pattern(input_path, scale_w, scale_h, target_size, output_path):
     pdf = pikepdf.open(input_path)
     total_scaled = 0
-    total_skipped = 0
+    total_kept = 0
+    total_removed = 0
 
-    for i, page in enumerate(pdf.pages):
+    for page in pdf.pages:
         contents = page.get('/Contents')
         if contents is None:
             continue
 
-        # Collect content streams
         if isinstance(contents, pikepdf.Array):
             raw = b''
             for ref in contents:
@@ -96,18 +104,16 @@ def scale_pattern(input_path, scale_w, scale_h, output_path):
         else:
             raw = contents.read_bytes()
 
-        # Get MC -> layer mapping for this page
-        size_mcs = get_size_mc_names(page)
+        mc_map = get_mc_layer_map(page)
 
-        if size_mcs:
-            # Selective scaling: only size-layer BDC blocks
-            new_content, scaled, skipped = scale_size_blocks(
-                raw, scale_w, scale_h, size_mcs
+        if mc_map:
+            new_content, s, k, r = process_content(
+                raw, scale_w, scale_h, target_size, mc_map
             )
-            total_scaled += scaled
-            total_skipped += skipped
+            total_scaled += s
+            total_kept += k
+            total_removed += r
         else:
-            # No MC mapping found - skip scaling for this page
             new_content = raw
 
         page['/Contents'] = pdf.make_stream(new_content)
@@ -115,16 +121,17 @@ def scale_pattern(input_path, scale_w, scale_h, output_path):
     pdf.save(output_path, linearize=True)
     pdf.close()
 
-    return total_scaled, total_skipped
+    return total_scaled, total_kept, total_removed
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Scale pattern PDF geometry while preserving fixed elements'
+        description='Scale custom-fit pattern PDF: keep target size + fixed elements only'
     )
-    parser.add_argument('input', help='Input PDF (single-size)')
+    parser.add_argument('input', help='Input PDF')
     parser.add_argument('scale_w', type=float, help='Width scale factor')
     parser.add_argument('scale_h', type=float, help='Height scale factor')
+    parser.add_argument('target_size', help='Target size to keep (e.g. L, M, XL)')
     parser.add_argument('output', help='Output PDF path')
     args = parser.parse_args()
 
@@ -134,12 +141,15 @@ def main():
     if args.scale_h < 0.5 or args.scale_h > 1.5:
         print(f'ERROR: scale_h {args.scale_h} out of safe range [0.5, 1.5]')
         sys.exit(1)
+    if args.target_size.upper() not in SIZE_NAMES:
+        print(f'ERROR: unknown size {args.target_size}')
+        sys.exit(1)
 
-    print(f'Scaling {args.input}: W*{args.scale_w:.4f} H*{args.scale_h:.4f}')
-    scaled, skipped = scale_pattern(
-        args.input, args.scale_w, args.scale_h, args.output
+    print(f'Scaling {args.input}: size={args.target_size} W*{args.scale_w:.4f} H*{args.scale_h:.4f}')
+    s, k, r = scale_pattern(
+        args.input, args.scale_w, args.scale_h, args.target_size, args.output
     )
-    print(f'Scaled {scaled} size blocks, kept {skipped} fixed blocks unchanged')
+    print(f'Result: {s} blocks scaled, {k} fixed blocks kept, {r} other sizes removed')
     print(f'Output: {args.output}')
 
 
