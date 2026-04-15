@@ -72,9 +72,19 @@ def process_content(raw_bytes, scale_w, scale_h, target_size, mc_map):
             scaled += 1
             return f'{prefix}{scale_cmd}{content}{restore_cmd}{suffix}'
         elif layer_name.upper() in SIZE_NAMES:
-            # Other size: remove entirely
+            # Other size: remove content but balance q/Q operators
+            # Count q and Q in the removed content to maintain graphics state
             removed += 1
-            return ''
+            q_count = len(re.findall(r'(?<!\w)q(?!\w)', content))
+            Q_count = len(re.findall(r'(?<!\w)Q(?!\w)', content))
+            # If content had more Q than q, we need to add q's to compensate
+            # If content had more q than Q, we need to add Q's to compensate
+            balance = ''
+            if Q_count > q_count:
+                balance = 'q\n' * (Q_count - q_count)
+            elif q_count > Q_count:
+                balance = 'Q\n' * (q_count - Q_count)
+            return balance
         else:
             # Fixed content (Layer 1, etc.): keep unchanged
             kept += 1
@@ -113,6 +123,15 @@ def scale_pattern(input_path, scale_w, scale_h, target_size, output_path):
             total_scaled += s
             total_kept += k
             total_removed += r
+
+            # Fix q/Q balance — removing BDC blocks can orphan operators
+            text_check = new_content.decode('latin-1')
+            q_count = len(re.findall(r'(?<!\w)q(?!\w)', text_check))
+            Q_count = len(re.findall(r'(?<!\w)Q(?!\w)', text_check))
+            if q_count > Q_count:
+                new_content += ('Q\n' * (q_count - Q_count)).encode('latin-1')
+            elif Q_count > q_count:
+                new_content = ('q\n' * (Q_count - q_count)).encode('latin-1') + new_content
         else:
             new_content = raw
 
