@@ -87,8 +87,17 @@
 		return m ? m[1].toUpperCase() : null;
 	}
 	const aiSize = $derived(extractSizeFromText(refinedText) ?? extractSizeFromText(streamedText));
-	const recommendedSize = $derived(aiSize ?? deterministicResult?.recommended_size ?? null);
-	const highlightedIndex = $derived(recommendedSize ? (chartData?.sizes ?? sizes).indexOf(recommendedSize) : -1);
+	const patternSizes = $derived(chartData?.sizes ?? sizes);
+	const aiSizeOutOfRange = $derived(aiSize ? !patternSizes.includes(aiSize) : false);
+	const recommendedSize = $derived.by(() => {
+		if (aiSize && patternSizes.includes(aiSize)) return aiSize;
+		if (aiSize && !patternSizes.includes(aiSize)) {
+			// AI suggested a size outside pattern range — use closest available
+			return deterministicResult?.recommended_size ?? patternSizes[patternSizes.length - 1] ?? null;
+		}
+		return deterministicResult?.recommended_size ?? null;
+	});
+	const highlightedIndex = $derived(recommendedSize ? patternSizes.indexOf(recommendedSize) : -1);
 	const hasPreferences = $derived(!!(fitPreference || bustPref || waistPref || hipPref || lengthPref || fabricStretch));
 
 	// Parse completed text into sections for visual components
@@ -480,7 +489,14 @@
 				</div>
 			{/if}
 
-			{#if deterministicResult?.between_sizes}
+			{#if aiSizeOutOfRange}
+					<div class="between-banner" style="background: linear-gradient(135deg, #fef3c7, #fde68a); border-color: #f59e0b;">
+						<strong>Your measurements suggest size {aiSize}</strong>, but this pattern only goes up to {patternSizes[patternSizes.length - 1]}.
+						We recommend using the <strong>Custom-fit pattern</strong> below — it will adjust the {recommendedSize} pattern to your exact measurements.
+					</div>
+				{/if}
+
+				{#if deterministicResult?.between_sizes}
 				<div class="between-card">↕ Between <strong>{deterministicResult.lower_size}</strong> and <strong>{deterministicResult.upper_size}</strong></div>
 			{/if}
 
