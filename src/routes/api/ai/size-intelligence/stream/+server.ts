@@ -272,6 +272,7 @@ Based on their height vs the garment's full length. Also consider shoulder width
 Fabric-specific advice (stretch vs woven affects size choice). Construction details that affect fit (darts, zipper, slit, lining). Anything the sewer should know.
 
 Rules:
+- CRITICAL: You MUST recommend one of the AVAILABLE SIZES listed in the data. Never suggest a size that doesn't exist (e.g., don't suggest 3XL if the pattern only goes to 2XL). If the customer's measurements exceed the largest available size, recommend the largest size and explain that we also offer a custom-fit option that will adjust the pattern to their exact measurements.
 - Never use jargon (DXF, MLP, grading, ease calculation, embeddings)
 - Keep each section 2-4 sentences max
 - Be warm and helpful, not clinical
@@ -303,6 +304,7 @@ Which preferences shifted the recommendation and why. Reference specific finishe
 Any new adjustments based on preferences.
 
 Rules:
+- CRITICAL: Only recommend sizes that exist in the AVAILABLE SIZES list. Never suggest a non-existent size. If measurements exceed the range, recommend the largest available size and mention the custom-fit option.
 - Be concise — they already got the full analysis
 - Only mention what changed
 - If nothing changes, say so confidently with reasoning
@@ -322,8 +324,10 @@ function buildPrompt(
 	let prompt = `CUSTOMER: bust ${bust}cm, waist ${waist}cm, hip ${hip}cm${height ? `, height ${height}cm` : ''} (${source || 'tape measure'})
 
 PATTERN: ${patternName}
+AVAILABLE SIZES: ${chart.sizes.join(', ')} (IMPORTANT: you MUST recommend one of these sizes — no other sizes exist for this pattern)
 DETERMINISTIC MATCH: ${match.recommended.size} (score ${match.recommended.score.toFixed(1)})
-Between sizes: ${match.betweenSizes ? `yes (${match.lowerSize}/${match.upperSize})` : 'no'}`;
+Between sizes: ${match.betweenSizes ? `yes (${match.lowerSize}/${match.upperSize})` : 'no'}
+CUSTOM-FIT AVAILABLE: ${hasDxf ? 'Yes — if the customer\'s measurements fall outside the standard size range, mention that we offer a custom-fit pattern that adjusts the closest size to their exact measurements.' : 'No'}`;
 
 	// Body chart (if available)
 	if (hasBodyData) {
