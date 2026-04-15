@@ -80,23 +80,19 @@
 	let analysisStep = $state(0);
 
 	const canSubmit = $derived(!!(bust && waist && hip));
+	// The deterministic match is the authoritative size — computed from actual
+	// size chart data, always valid, always within pattern range. The AI text
+	// explains the recommendation but does NOT determine the size.
+	const patternSizes = $derived(chartData?.sizes ?? sizes);
+	const recommendedSize = $derived(deterministicResult?.recommended_size ?? null);
+	// Check if AI text mentions a size outside the pattern range (for warning)
 	function extractSizeFromText(text: string): string | null {
 		if (!text) return null;
-		const validSizes = ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
 		const m = text.match(/Size\s+(XXS|XS|S|M|L|XL|2XL|3XL|4XL|5XL)\b/i);
 		return m ? m[1].toUpperCase() : null;
 	}
 	const aiSize = $derived(extractSizeFromText(refinedText) ?? extractSizeFromText(streamedText));
-	const patternSizes = $derived(chartData?.sizes ?? sizes);
 	const aiSizeOutOfRange = $derived(aiSize ? !patternSizes.includes(aiSize) : false);
-	const recommendedSize = $derived.by(() => {
-		if (aiSize && patternSizes.includes(aiSize)) return aiSize;
-		if (aiSize && !patternSizes.includes(aiSize)) {
-			// AI suggested a size outside pattern range — use closest available
-			return deterministicResult?.recommended_size ?? patternSizes[patternSizes.length - 1] ?? null;
-		}
-		return deterministicResult?.recommended_size ?? null;
-	});
 	const highlightedIndex = $derived(recommendedSize ? patternSizes.indexOf(recommendedSize) : -1);
 	const hasPreferences = $derived(!!(fitPreference || bustPref || waistPref || hipPref || lengthPref || fabricStretch));
 
