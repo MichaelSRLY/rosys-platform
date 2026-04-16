@@ -1,6 +1,7 @@
 /**
  * Pattern grading calculation engine.
- * Computes scale factors from size chart deltas for proportional grading.
+ * Uses FINISHED garment measurements only (from authoritative xlsx spec sheets).
+ * No body chart needed — customer body measurements + standard ease = custom finished.
  */
 
 import { query } from '$lib/db.server';
@@ -15,11 +16,11 @@ export interface GradingInput {
 export interface GradingResult {
 	pattern_slug: string;
 	sample_size: string;
-	target_size: string; // nearest standard size
-	scale_width: number; // horizontal scale factor (from sample size, for DXF)
-	scale_height: number; // vertical scale factor (from sample size, for DXF)
-	pdf_scale_width: number; // horizontal scale factor (from target size, for PDF)
-	pdf_scale_height: number; // vertical scale factor (from target size, for PDF)
+	target_size: string;
+	scale_width: number;
+	scale_height: number;
+	pdf_scale_width: number;
+	pdf_scale_height: number;
 	adjustments: {
 		bust_delta_cm: number;
 		waist_delta_cm: number;
@@ -52,8 +53,13 @@ const SIZE_ORDER: Record<string, number> = {
 	XXS: 0, XS: 1, S: 2, M: 3, L: 4, XL: 5, '2XL': 6, '3XL': 7, '4XL': 8, '5XL': 9
 };
 
+// Standard ease values (cm) — the difference between body measurement and finished garment.
+// These are typical for Rosys patterns (fitted dresses/tops with 1cm seam allowance).
+const STANDARD_EASE = { bust: 5, waist: 4, hip: 4 };
+
 /**
  * Calculate grading parameters for a custom-fit pattern.
+ * Logic: customer body + standard ease → custom finished → compare to finished chart → scale.
  */
 export async function calculateGrading(
 	patternSlug: string,
@@ -72,18 +78,7 @@ export async function calculateGrading(
 	const meta = JSON.parse(dxfChunks[0].metadata);
 	const sampleSize = meta.sample_size as string;
 
-	// Get size chart data
-	const bodyRows = await query<{
-		size: string; bust_cm: number | null; waist_cm: number | null; hip_cm: number | null;
-	}>(
-		`SELECT size, bust_cm, waist_cm, hip_cm FROM cs_pattern_size_charts
-		 WHERE pattern_slug = $1 AND chart_type = 'body'
-		 ORDER BY CASE size WHEN 'XXS' THEN 0 WHEN 'XS' THEN 1 WHEN 'S' THEN 2 WHEN 'M' THEN 3
-		   WHEN 'L' THEN 4 WHEN 'XL' THEN 5 WHEN '2XL' THEN 6 WHEN '3XL' THEN 7
-		   WHEN '4XL' THEN 8 WHEN '5XL' THEN 9 END`,
-		[patternSlug]
-	);
-
+	// Get finished garment measurements (the only chart we need)
 	const finishedRows = await query<{
 		size: string; bust_cm: number | null; waist_cm: number | null;
 		hip_cm: number | null; full_length_cm: number | null;
@@ -96,15 +91,22 @@ export async function calculateGrading(
 		[patternSlug]
 	);
 
-	if (bodyRows.length === 0 || finishedRows.length === 0) return null;
+	if (finishedRows.length === 0) return null;
 
-	// Find the closest standard size to the user's measurements
-	let bestSize = bodyRows[0].size;
+	// Compute what the customer's finished garment should measure
+	// (body measurement + standard ease = what the garment needs to be)
+	const customerFinishedBust = measurements.bust_cm + STANDARD_EASE.bust;
+	const customerFinishedWaist = measurements.waist_cm + STANDARD_EASE.waist;
+	const customerFinishedHip = measurements.hip_cm + STANDARD_EASE.hip;
+
+	// Find the closest size by comparing customer's ideal finished measurements
+	// against the actual finished garment chart
+	let bestSize = finishedRows[0].size;
 	let bestScore = Infinity;
-	for (const row of bodyRows) {
-		const bustDiff = row.bust_cm ? Math.abs(Number(row.bust_cm) - measurements.bust_cm) : 0;
-		const waistDiff = row.waist_cm ? Math.abs(Number(row.waist_cm) - measurements.waist_cm) : 0;
-		const hipDiff = row.hip_cm ? Math.abs(Number(row.hip_cm) - measurements.hip_cm) : 0;
+	for (const row of finishedRows) {
+		const bustDiff = row.bust_cm ? Math.abs(Number(row.bust_cm) - customerFinishedBust) : 0;
+		const waistDiff = row.waist_cm ? Math.abs(Number(row.waist_cm) - customerFinishedWaist) : 0;
+		const hipDiff = row.hip_cm ? Math.abs(Number(row.hip_cm) - customerFinishedHip) : 0;
 		const score = bustDiff * 1.5 + waistDiff + hipDiff * 1.2;
 		if (score < bestScore) {
 			bestScore = score;
@@ -112,34 +114,26 @@ export async function calculateGrading(
 		}
 	}
 
-	// Get finished measurements for sample size and target size
 	const sampleFinished = finishedRows.find((r) => r.size === sampleSize);
 	const targetFinished = finishedRows.find((r) => r.size === bestSize);
 
 	if (!sampleFinished) return null;
 
-	// Calculate ease at target size (finished - body)
-	const targetBody = bodyRows.find((r) => r.size === bestSize);
-	const bustEase = targetFinished?.bust_cm && targetBody?.bust_cm
-		? Number(targetFinished.bust_cm) - Number(targetBody.bust_cm)
-		: 4; // default 4cm ease if unknown
-
-	// Custom finished measurements = user body + ease from target size
-	const waistEase = targetFinished?.waist_cm && targetBody?.waist_cm
-		? Number(targetFinished.waist_cm) - Number(targetBody.waist_cm)
-		: 4;
-	const hipEase = targetFinished?.hip_cm && targetBody?.hip_cm
-		? Number(targetFinished.hip_cm) - Number(targetBody.hip_cm)
-		: 4;
-
+	// Custom finished = customer body + standard ease
 	const customFinished = {
-		bust_cm: measurements.bust_cm + bustEase,
-		waist_cm: measurements.waist_cm + waistEase,
-		hip_cm: measurements.hip_cm + hipEase,
+		bust_cm: customerFinishedBust,
+		waist_cm: customerFinishedWaist,
+		hip_cm: customerFinishedHip,
 		full_length_cm: targetFinished?.full_length_cm ? Number(targetFinished.full_length_cm) : null
 	};
 
-	// Scale factors relative to sample size (for DXF — DXF is in sample size)
+	// Target finished measurements (what the standard size garment actually measures)
+	const tBust = targetFinished?.bust_cm ? Number(targetFinished.bust_cm) : null;
+	const tWaist = targetFinished?.waist_cm ? Number(targetFinished.waist_cm) : null;
+	const tHip = targetFinished?.hip_cm ? Number(targetFinished.hip_cm) : null;
+	const tLength = targetFinished?.full_length_cm ? Number(targetFinished.full_length_cm) : null;
+
+	// Scale factors relative to sample size (for DXF)
 	const sampleBust = sampleFinished.bust_cm ? Number(sampleFinished.bust_cm) : null;
 	const sampleLength = sampleFinished.full_length_cm ? Number(sampleFinished.full_length_cm) : null;
 	const scaleWidth = sampleBust ? customFinished.bust_cm / sampleBust : 1;
@@ -147,47 +141,34 @@ export async function calculateGrading(
 		? customFinished.full_length_cm / sampleLength
 		: Math.sqrt(scaleWidth);
 
-	// Compute effective target finished measurements (with body+ease fallback for nulls)
-	// These are used for both ratio calculation and the return value.
-	const effTargetBust = targetFinished?.bust_cm ? Number(targetFinished.bust_cm) : (targetBody?.bust_cm ? Number(targetBody.bust_cm) + bustEase : null);
-	const effTargetWaist = targetFinished?.waist_cm ? Number(targetFinished.waist_cm) : (targetBody?.waist_cm ? Number(targetBody.waist_cm) + waistEase : null);
-	const effTargetHip = targetFinished?.hip_cm ? Number(targetFinished.hip_cm) : (targetBody?.hip_cm ? Number(targetBody.hip_cm) + hipEase : null);
-	const effTargetLength = targetFinished?.full_length_cm ? Number(targetFinished.full_length_cm) : null;
-
-	// Scale factors relative to target size (for PDF — we extract target size first)
-	// Use the MAXIMUM ratio across bust, waist, hip so the pattern fits the user's widest point.
-	const bustRatio = effTargetBust ? customFinished.bust_cm / effTargetBust : 1;
-	const waistRatio = effTargetWaist ? customFinished.waist_cm / effTargetWaist : 1;
-	const hipRatio = effTargetHip ? customFinished.hip_cm / effTargetHip : 1;
+	// Scale factors relative to target size (for PDF)
+	// Use max ratio so the pattern fits the customer's widest measurement
+	const bustRatio = tBust ? customFinished.bust_cm / tBust : 1;
+	const waistRatio = tWaist ? customFinished.waist_cm / tWaist : 1;
+	const hipRatio = tHip ? customFinished.hip_cm / tHip : 1;
 	const pdfScaleWidth = Math.max(bustRatio, waistRatio, hipRatio);
-	const pdfScaleHeight = effTargetLength && customFinished.full_length_cm
-		? customFinished.full_length_cm / effTargetLength
+	const pdfScaleHeight = tLength && customFinished.full_length_cm
+		? customFinished.full_length_cm / tLength
 		: Math.sqrt(pdfScaleWidth);
 
-	// Compute deltas
+	// Deltas (custom vs sample — how much the DXF needs to change)
 	const adjustments = {
 		bust_delta_cm: customFinished.bust_cm - (sampleBust ?? customFinished.bust_cm),
 		waist_delta_cm: customFinished.waist_cm - (sampleFinished.waist_cm ? Number(sampleFinished.waist_cm) : customFinished.waist_cm),
 		hip_delta_cm: customFinished.hip_cm - (sampleFinished.hip_cm ? Number(sampleFinished.hip_cm) : customFinished.hip_cm),
 		length_delta_cm: sampleLength && customFinished.full_length_cm
-			? customFinished.full_length_cm - sampleLength
-			: null
+			? customFinished.full_length_cm - sampleLength : null
 	};
 
-	// Confidence assessment
+	// Confidence
 	const warnings: string[] = [];
 	let confidence: 'high' | 'medium' | 'low' = 'high';
 
-	if (Math.abs(scaleWidth - 1) > 0.15) {
-		warnings.push('Large width adjustment (>15%) — curved pieces like armholes may not scale perfectly.');
+	if (Math.abs(pdfScaleWidth - 1) > 0.04) {
+		warnings.push('Adjustment exceeds 4% — pattern accuracy decreases. Consider standard size with manual alterations.');
 		confidence = 'medium';
 	}
-	if (Math.abs(scaleWidth - 1) > 0.25) {
-		warnings.push('Very large adjustment (>25%) — consider using a different base size if available.');
-		confidence = 'low';
-	}
 
-	// Check if user is outside the pattern's size range
 	const sizeIdx = SIZE_ORDER[bestSize] ?? 3;
 	const sampleIdx = SIZE_ORDER[sampleSize] ?? 1;
 	if (Math.abs(sizeIdx - sampleIdx) > 3) {
@@ -206,15 +187,15 @@ export async function calculateGrading(
 		adjustments,
 		sample_finished: {
 			bust_cm: sampleBust,
-			waist_cm: sampleFinished.waist_cm ? Number(sampleFinished.waist_cm) : (bodyRows.find(r => r.size === sampleSize)?.waist_cm ? Number(bodyRows.find(r => r.size === sampleSize)!.waist_cm) + waistEase : null),
-			hip_cm: sampleFinished.hip_cm ? Number(sampleFinished.hip_cm) : (bodyRows.find(r => r.size === sampleSize)?.hip_cm ? Number(bodyRows.find(r => r.size === sampleSize)!.hip_cm) + hipEase : null),
+			waist_cm: sampleFinished.waist_cm ? Number(sampleFinished.waist_cm) : null,
+			hip_cm: sampleFinished.hip_cm ? Number(sampleFinished.hip_cm) : null,
 			full_length_cm: sampleLength
 		},
 		target_finished: {
-			bust_cm: effTargetBust,
-			waist_cm: effTargetWaist,
-			hip_cm: effTargetHip,
-			full_length_cm: effTargetLength
+			bust_cm: tBust,
+			waist_cm: tWaist,
+			hip_cm: tHip,
+			full_length_cm: tLength
 		},
 		custom_finished: customFinished,
 		confidence,
