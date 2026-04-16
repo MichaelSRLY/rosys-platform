@@ -318,24 +318,15 @@ function buildPrompt(
 	profile: any, patternContext: Record<string, string[]>,
 	preferences?: any, previousRecommendation?: string, hasDxf?: boolean
 ): string {
-	// Check if body chart has data
-	const hasBodyData = chart.body.some((r: any) => r.bust_cm !== null);
-
-	let prompt = `CUSTOMER: bust ${bust}cm, waist ${waist}cm, hip ${hip}cm${height ? `, height ${height}cm` : ''} (${source || 'tape measure'})
+	let prompt = `CUSTOMER BODY MEASUREMENTS: bust ${bust}cm, waist ${waist}cm, hip ${hip}cm${height ? `, height ${height}cm` : ''} (${source || 'tape measure'})
 
 PATTERN: ${patternName}
 AVAILABLE SIZES: ${chart.sizes.join(', ')} (IMPORTANT: you MUST recommend one of these sizes — no other sizes exist for this pattern)
 DETERMINISTIC MATCH: ${match.recommended.size} (score ${match.recommended.score.toFixed(1)})
 Between sizes: ${match.betweenSizes ? `yes (${match.lowerSize}/${match.upperSize})` : 'no'}
-CUSTOM-FIT AVAILABLE: ${hasDxf ? 'Yes — if the customer\'s measurements fall outside the standard size range, mention that we offer a custom-fit pattern that adjusts the closest size to their exact measurements.' : 'No'}`;
+CUSTOM-FIT AVAILABLE: ${hasDxf ? 'Yes — if the customer\'s measurements fall outside the standard size range, mention that we offer a custom-fit pattern that adjusts the closest size to their exact measurements.' : 'No'}
 
-	// Body chart (if available)
-	if (hasBodyData) {
-		prompt += `\n\nBODY SIZE CHART:
-${chart.body.map((r: any) => `  ${r.size}: bust=${r.bust_cm} waist=${r.waist_cm} hip=${r.hip_cm}`).join('\n')}`;
-	} else {
-		prompt += `\n\nNOTE: This pattern has NO body size chart — only finished garment measurements. The customer's measurements must be compared directly to the finished garment (which INCLUDES ease).`;
-	}
+NOTE: The measurements below are FINISHED GARMENT measurements (the actual garment dimensions including ease/room). The customer's BODY measurements are smaller — the garment must be larger than the body to fit. Standard ease is approximately +5cm bust, +4cm waist, +4cm hip.`;
 
 	// Finished chart (always available)
 	prompt += `\n\nFINISHED GARMENT MEASUREMENTS:
