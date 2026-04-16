@@ -112,11 +112,15 @@ def scale_pattern(input_path, scale_w, scale_h, target_size, output_path):
                 page['/Contents'] = pdf.make_stream(prefix + raw + suffix)
                 continue
 
+            # Per-piece scaling: modify each piece's position transform
+            import re as _re
+            PIECE_RE = _re.compile(r'^q\s+1\s+0\s+0\s+1\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+cm$')
+
             content = raw.decode('latin-1')
             lines = content.split('\n')
             output = []
             bdc_stack = []
-            waiting_for_wn = False
+            scaled_count = 0
 
             for line in lines:
                 s = line.strip()
@@ -125,34 +129,26 @@ def scale_pattern(input_path, scale_w, scale_h, target_size, output_path):
                     is_size = any(f'/{mc} ' in s or f'/{mc} BDC' in s for mc in size_mc_refs)
                     bdc_stack.append(is_size)
                     output.append(line)
-                    if is_size:
-                        waiting_for_wn = True
-                    continue
-
-                if waiting_for_wn and s == 'W n':
-                    output.append(line)
-                    # Centered scale: expand equally from page center
-                    mbox = page.get('/MediaBox', [0, 0, 2383.937, 3370.394])
-                    pw = float(mbox[2]) - float(mbox[0])
-                    ph = float(mbox[3]) - float(mbox[1])
-                    tx = (pw / 2) * (1 - scale_w)
-                    ty = (ph / 2) * (1 - scale_h)
-                    output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} {tx:.6f} {ty:.6f} cm')
-                    waiting_for_wn = False
                     continue
 
                 if s == 'EMC':
                     if bdc_stack:
-                        was_size = bdc_stack.pop()
-                        if was_size:
-                            output.append('Q')
+                        bdc_stack.pop()
                     output.append(line)
                     continue
+
+                if bdc_stack and bdc_stack[-1]:
+                    m = PIECE_RE.match(s)
+                    if m:
+                        x, y = m.group(1), m.group(2)
+                        output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} {x} {y} cm')
+                        scaled_count += 1
+                        continue
 
                 output.append(line)
 
             page['/Contents'] = pdf.make_stream('\n'.join(output).encode('latin-1'))
-            print(f"  Scaled size layers only ({', '.join(sorted(size_mc_refs))}), Layer 1 untouched")
+            print(f"  Per-piece scaled {scaled_count} transforms in size layers, Layer 1 untouched")
 
     pdf.save(output_path, linearize=True)
     pdf.close()

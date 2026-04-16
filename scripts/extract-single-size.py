@@ -122,15 +122,18 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
                 page['/Contents'] = pdf.make_stream(prefix + raw + suffix)
                 continue
 
-            # Parse content stream, insert scale inside size BDC/EMC blocks.
-            # Size layers start with: BDC -> Q -> q -> clip_rect -> W n -> ...
-            # We insert the scale AFTER "W n" so it wraps the actual drawing,
-            # not before the Q that would immediately close it.
+            # Per-piece scaling: modify each piece's position transform inside
+            # size BDC/EMC blocks. Changes "q 1 0 0 1 x y cm" to "q sw 0 0 sh x y cm"
+            # so each piece scales around its own anchor point — no page-wide shift,
+            # no edge clipping, Layer 1 markers stay aligned.
+            import re as _re
+            PIECE_RE = _re.compile(r'^q\s+1\s+0\s+0\s+1\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+cm$')
+
             content = raw.decode('latin-1')
             lines = content.split('\n')
             output = []
-            bdc_stack = []  # True if this BDC level is a size layer
-            waiting_for_wn = False  # waiting to insert scale after W n
+            bdc_stack = []
+            scaled_count = 0
 
             for line in lines:
                 s = line.strip()
@@ -139,35 +142,27 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
                     is_size = any(f'/{mc} ' in s or f'/{mc} BDC' in s for mc in size_mc_refs)
                     bdc_stack.append(is_size)
                     output.append(line)
-                    if is_size:
-                        waiting_for_wn = True
-                    continue
-
-                if waiting_for_wn and s == 'W n':
-                    output.append(line)
-                    # Centered scale: expand equally from page center
-                    # Matrix: [sw 0 0 sh cx*(1-sw) cy*(1-sh)]
-                    mbox = page.get('/MediaBox', [0, 0, 2383.937, 3370.394])
-                    pw = float(mbox[2]) - float(mbox[0])
-                    ph = float(mbox[3]) - float(mbox[1])
-                    tx = (pw / 2) * (1 - scale_w)
-                    ty = (ph / 2) * (1 - scale_h)
-                    output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} {tx:.6f} {ty:.6f} cm')
-                    waiting_for_wn = False
                     continue
 
                 if s == 'EMC':
                     if bdc_stack:
-                        was_size = bdc_stack.pop()
-                        if was_size:
-                            output.append('Q')
+                        bdc_stack.pop()
                     output.append(line)
                     continue
+
+                # Only modify transforms inside size layers
+                if bdc_stack and bdc_stack[-1]:
+                    m = PIECE_RE.match(s)
+                    if m:
+                        x, y = m.group(1), m.group(2)
+                        output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} {x} {y} cm')
+                        scaled_count += 1
+                        continue
 
                 output.append(line)
 
             page['/Contents'] = pdf.make_stream('\n'.join(output).encode('latin-1'))
-            print(f"  Scaled size layers only ({', '.join(sorted(size_mc_refs))}), Layer 1 untouched")
+            print(f"  Per-piece scaled {scaled_count} transforms in size layers, Layer 1 untouched")
 
     pdf.save(output_path, linearize=True)
     pdf.close()
