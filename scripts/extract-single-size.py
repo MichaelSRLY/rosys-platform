@@ -122,17 +122,70 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
                 page['/Contents'] = pdf.make_stream(prefix + raw + suffix)
                 continue
 
-            # Per-piece scaling: modify each piece's position transform inside
-            # size BDC/EMC blocks. Changes "q 1 0 0 1 x y cm" to "q sw 0 0 sh x y cm"
-            # so each piece scales around its own anchor point — no page-wide shift,
-            # no edge clipping, Layer 1 markers stay aligned.
+            # Two-pass center-scaled per-piece approach:
+            # Pass 1: Parse target size pieces and compute their visual centers.
+            # Pass 2: Rewrite transforms as q sw 0 0 sh (x-cx*(sw-1)) (y-cy*(sh-1)) cm
+            # This distributes expansion equally in all directions — no overlap.
             import re as _re
             PIECE_RE = _re.compile(r'^q\s+1\s+0\s+0\s+1\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+cm$')
+            MOVE_RE = _re.compile(r'([\d.eE+-]+)\s+([\d.eE+-]+)\s+m')
+            LINE_RE = _re.compile(r'([\d.eE+-]+)\s+([\d.eE+-]+)\s+l')
+            CURVE_RE = _re.compile(r'([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+c')
 
             content = raw.decode('latin-1')
             lines = content.split('\n')
+
+            # Find which MC is the target size
+            target_mc = None
+            for mc_key in props.keys():
+                mc_name = str(mc_key).lstrip('/')
+                try:
+                    if str(props[mc_key].get('/Name', '')).upper() == target_size.upper():
+                        target_mc = mc_name
+                        break
+                except Exception:
+                    pass
+
+            # Pass 1: compute piece centers from target size layer
+            piece_centers = []
+            in_target = False
+            in_piece = False
+            q_depth = 0
+            p_lines = []
+            for line in lines:
+                s = line.strip()
+                if target_mc and (f'/{target_mc} BDC' in s or f'/{target_mc} ' in s and s.endswith('BDC')):
+                    in_target = True; continue
+                if s == 'EMC' and in_target:
+                    in_target = False; continue
+                if in_target and not in_piece:
+                    if PIECE_RE.match(s):
+                        in_piece = True; p_lines = []; q_depth = 1; continue
+                if in_target and in_piece:
+                    if s.startswith('q') or s == 'q': q_depth += 1
+                    elif s == 'Q':
+                        q_depth -= 1
+                        if q_depth == 0:
+                            xs, ys = [], []
+                            for pl in p_lines:
+                                ps = pl.strip()
+                                for cm in CURVE_RE.finditer(ps):
+                                    xs.extend([float(cm.group(1)), float(cm.group(3)), float(cm.group(5))])
+                                    ys.extend([float(cm.group(2)), float(cm.group(4)), float(cm.group(6))])
+                                for mm in MOVE_RE.finditer(ps):
+                                    xs.append(float(mm.group(1))); ys.append(float(mm.group(2)))
+                                for lm in LINE_RE.finditer(ps):
+                                    xs.append(float(lm.group(1))); ys.append(float(lm.group(2)))
+                            cx = (min(xs) + max(xs)) / 2 if xs else 0
+                            cy = (min(ys) + max(ys)) / 2 if ys else 0
+                            piece_centers.append((cx, cy))
+                            in_piece = False; continue
+                    p_lines.append(line)
+
+            # Pass 2: rewrite all size layer transforms with centered scaling
             output = []
             bdc_stack = []
+            piece_seq = 0
             scaled_count = 0
 
             for line in lines:
@@ -141,6 +194,8 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
                 if s.endswith('BDC'):
                     is_size = any(f'/{mc} ' in s or f'/{mc} BDC' in s for mc in size_mc_refs)
                     bdc_stack.append(is_size)
+                    if is_size:
+                        piece_seq = 0
                     output.append(line)
                     continue
 
@@ -150,19 +205,26 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
                     output.append(line)
                     continue
 
-                # Only modify transforms inside size layers
                 if bdc_stack and bdc_stack[-1]:
                     m = PIECE_RE.match(s)
                     if m:
-                        x, y = m.group(1), m.group(2)
-                        output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} {x} {y} cm')
+                        x = float(m.group(1))
+                        y = float(m.group(2))
+                        if piece_seq < len(piece_centers):
+                            cx, cy = piece_centers[piece_seq]
+                            nx = x - cx * (scale_w - 1)
+                            ny = y - cy * (scale_h - 1)
+                            output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} {nx:.4f} {ny:.4f} cm')
+                        else:
+                            output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} {x} {y} cm')
+                        piece_seq += 1
                         scaled_count += 1
                         continue
 
                 output.append(line)
 
             page['/Contents'] = pdf.make_stream('\n'.join(output).encode('latin-1'))
-            print(f"  Per-piece scaled {scaled_count} transforms in size layers, Layer 1 untouched")
+            print(f"  Center-scaled {scaled_count} piece transforms ({len(piece_centers)} centers), Layer 1 untouched")
 
     pdf.save(output_path, linearize=True)
     pdf.close()

@@ -175,7 +175,7 @@
 			let res = await fetch('/api/patterns/generate-custom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pattern_slug: pattern.pattern_slug, bust: parseFloat(bust), waist: parseFloat(waist), hip: parseFloat(hip) }) });
 			if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Failed');
 			const json = await res.json();
-			customFitGrading = json.grading; customFitError = json.error || '';
+			customFitGrading = { ...json.grading, scale_pct: json.scale_pct }; customFitError = json.error || '';
 
 			// Then generate all formats to get file list
 			if (!customFitError) {
@@ -734,7 +734,14 @@
 										{/each}</tbody>
 									</table>
 								</div>
-								{#if customFitError}<div class="err-box mb-3">{customFitError}</div>
+								{#if customFitGrading?.scale_pct}
+									<div class="info-box mb-3" style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 10px; padding: 12px 14px; font-size: 13px; color: #92400e; line-height: 1.5;">
+										<strong>Adjustment too large ({customFitGrading.scale_pct}%)</strong><br>
+										Your measurements differ more than 4% from size {customFitGrading.target_size}. At this level, proportional scaling may distort seam allowances and pattern details.
+										<br><br>
+										<strong>What you can do:</strong> Download the standard <strong>{customFitGrading.target_size}</strong> size above and apply the alterations listed in the AI recommendation manually — this gives the most accurate fit.
+									</div>
+								{:else if customFitError}<div class="err-box mb-3">{customFitError}</div>
 								{:else}
 									<span class="card-label mb-2 block">Download custom-fit pattern</span>
 									<div class="dl-grid">

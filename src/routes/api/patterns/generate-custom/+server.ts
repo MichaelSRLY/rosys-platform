@@ -17,11 +17,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const grading = await calculateGrading(pattern_slug, { bust_cm: bust, waist_cm: waist, hip_cm: hip });
 	if (!grading) throw error(404, 'Pattern not found or missing size chart data');
 
-	// Cap scaling at +/- 25% (check PDF scale — relative to nearest size, not sample)
-	if (Math.abs(grading.pdf_scale_width - 1) > 0.25) {
+	// Cap scaling at 4% — validated by pattern expert as max for clean output
+	// (no piece overlap, seam allowances stay accurate, no edge clipping)
+	const scalePct = Math.abs(grading.pdf_scale_width - 1);
+	if (scalePct > 0.04) {
 		return json({
 			grading,
-			error: `Adjustment too large (${((grading.pdf_scale_width - 1) * 100).toFixed(0)}%). Custom fit works best within 25% of the nearest standard size.`
+			scale_pct: +(scalePct * 100).toFixed(1),
+			error: `Your measurements are ${(scalePct * 100).toFixed(0)}% beyond the nearest size (${grading.target_size}). Custom-fit patterns work best within 4% adjustment. For larger differences, we recommend downloading the nearest standard size and making manual alterations.`
 		});
 	}
 

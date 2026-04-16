@@ -112,43 +112,80 @@ def scale_pattern(input_path, scale_w, scale_h, target_size, output_path):
                 page['/Contents'] = pdf.make_stream(prefix + raw + suffix)
                 continue
 
-            # Per-piece scaling: modify each piece's position transform
+            # Two-pass center-scaled per-piece approach (same as extract-single-size.py)
             import re as _re
             PIECE_RE = _re.compile(r'^q\s+1\s+0\s+0\s+1\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+cm$')
+            MOVE_RE = _re.compile(r'([\d.eE+-]+)\s+([\d.eE+-]+)\s+m')
+            LINE_RE = _re.compile(r'([\d.eE+-]+)\s+([\d.eE+-]+)\s+l')
+            CURVE_RE = _re.compile(r'([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+c')
 
             content = raw.decode('latin-1')
             lines = content.split('\n')
-            output = []
-            bdc_stack = []
-            scaled_count = 0
 
+            # Find target size MC
+            target_mc = None
+            for mc_key in props.keys():
+                mc_name = str(mc_key).lstrip('/')
+                try:
+                    if str(props[mc_key].get('/Name', '')).upper() == target_size.upper():
+                        target_mc = mc_name; break
+                except Exception:
+                    pass
+
+            # Pass 1: compute piece centers from target size layer
+            piece_centers = []
+            in_target = in_piece = False
+            q_depth = 0; p_lines = []
             for line in lines:
                 s = line.strip()
+                if target_mc and (f'/{target_mc} BDC' in s or f'/{target_mc} ' in s and s.endswith('BDC')):
+                    in_target = True; continue
+                if s == 'EMC' and in_target: in_target = False; continue
+                if in_target and not in_piece:
+                    if PIECE_RE.match(s): in_piece = True; p_lines = []; q_depth = 1; continue
+                if in_target and in_piece:
+                    if s.startswith('q') or s == 'q': q_depth += 1
+                    elif s == 'Q':
+                        q_depth -= 1
+                        if q_depth == 0:
+                            xs, ys = [], []
+                            for pl in p_lines:
+                                ps = pl.strip()
+                                for cm in CURVE_RE.finditer(ps):
+                                    xs.extend([float(cm.group(1)), float(cm.group(3)), float(cm.group(5))])
+                                    ys.extend([float(cm.group(2)), float(cm.group(4)), float(cm.group(6))])
+                                for mm in MOVE_RE.finditer(ps): xs.append(float(mm.group(1))); ys.append(float(mm.group(2)))
+                                for lm in LINE_RE.finditer(ps): xs.append(float(lm.group(1))); ys.append(float(lm.group(2)))
+                            piece_centers.append(((min(xs)+max(xs))/2 if xs else 0, (min(ys)+max(ys))/2 if ys else 0))
+                            in_piece = False; continue
+                    p_lines.append(line)
 
+            # Pass 2: rewrite all size layer transforms with centered scaling
+            output = []; bdc_stack = []; piece_seq = 0; scaled_count = 0
+            for line in lines:
+                s = line.strip()
                 if s.endswith('BDC'):
                     is_size = any(f'/{mc} ' in s or f'/{mc} BDC' in s for mc in size_mc_refs)
                     bdc_stack.append(is_size)
-                    output.append(line)
-                    continue
-
+                    if is_size: piece_seq = 0
+                    output.append(line); continue
                 if s == 'EMC':
-                    if bdc_stack:
-                        bdc_stack.pop()
-                    output.append(line)
-                    continue
-
+                    if bdc_stack: bdc_stack.pop()
+                    output.append(line); continue
                 if bdc_stack and bdc_stack[-1]:
                     m = PIECE_RE.match(s)
                     if m:
-                        x, y = m.group(1), m.group(2)
-                        output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} {x} {y} cm')
-                        scaled_count += 1
-                        continue
-
+                        x, y = float(m.group(1)), float(m.group(2))
+                        if piece_seq < len(piece_centers):
+                            cx, cy = piece_centers[piece_seq]
+                            output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} {x - cx*(scale_w-1):.4f} {y - cy*(scale_h-1):.4f} cm')
+                        else:
+                            output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} {x} {y} cm')
+                        piece_seq += 1; scaled_count += 1; continue
                 output.append(line)
 
             page['/Contents'] = pdf.make_stream('\n'.join(output).encode('latin-1'))
-            print(f"  Per-piece scaled {scaled_count} transforms in size layers, Layer 1 untouched")
+            print(f"  Center-scaled {scaled_count} piece transforms, Layer 1 untouched")
 
     pdf.save(output_path, linearize=True)
     pdf.close()
