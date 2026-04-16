@@ -131,7 +131,13 @@ def scale_pattern(input_path, scale_w, scale_h, target_size, output_path):
 
                 if waiting_for_wn and s == 'W n':
                     output.append(line)
-                    output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm')
+                    # Centered scale: expand equally from page center
+                    mbox = page.get('/MediaBox', [0, 0, 2383.937, 3370.394])
+                    pw = float(mbox[2]) - float(mbox[0])
+                    ph = float(mbox[3]) - float(mbox[1])
+                    tx = (pw / 2) * (1 - scale_w)
+                    ty = (ph / 2) * (1 - scale_h)
+                    output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} {tx:.6f} {ty:.6f} cm')
                     waiting_for_wn = False
                     continue
 

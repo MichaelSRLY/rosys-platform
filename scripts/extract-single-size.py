@@ -145,7 +145,14 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
 
                 if waiting_for_wn and s == 'W n':
                     output.append(line)
-                    output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm')
+                    # Centered scale: expand equally from page center
+                    # Matrix: [sw 0 0 sh cx*(1-sw) cy*(1-sh)]
+                    mbox = page.get('/MediaBox', [0, 0, 2383.937, 3370.394])
+                    pw = float(mbox[2]) - float(mbox[0])
+                    ph = float(mbox[3]) - float(mbox[1])
+                    tx = (pw / 2) * (1 - scale_w)
+                    ty = (ph / 2) * (1 - scale_h)
+                    output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} {tx:.6f} {ty:.6f} cm')
                     waiting_for_wn = False
                     continue
 
