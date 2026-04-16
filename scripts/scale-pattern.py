@@ -116,6 +116,7 @@ def scale_pattern(input_path, scale_w, scale_h, target_size, output_path):
             lines = content.split('\n')
             output = []
             bdc_stack = []
+            waiting_for_wn = False
 
             for line in lines:
                 s = line.strip()
@@ -125,7 +126,13 @@ def scale_pattern(input_path, scale_w, scale_h, target_size, output_path):
                     bdc_stack.append(is_size)
                     output.append(line)
                     if is_size:
-                        output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm')
+                        waiting_for_wn = True
+                    continue
+
+                if waiting_for_wn and s == 'W n':
+                    output.append(line)
+                    output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm')
+                    waiting_for_wn = False
                     continue
 
                 if s == 'EMC':

@@ -122,11 +122,15 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
                 page['/Contents'] = pdf.make_stream(prefix + raw + suffix)
                 continue
 
-            # Parse content stream, insert scale only inside size BDC/EMC blocks
+            # Parse content stream, insert scale inside size BDC/EMC blocks.
+            # Size layers start with: BDC -> Q -> q -> clip_rect -> W n -> ...
+            # We insert the scale AFTER "W n" so it wraps the actual drawing,
+            # not before the Q that would immediately close it.
             content = raw.decode('latin-1')
             lines = content.split('\n')
             output = []
             bdc_stack = []  # True if this BDC level is a size layer
+            waiting_for_wn = False  # waiting to insert scale after W n
 
             for line in lines:
                 s = line.strip()
@@ -136,7 +140,13 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
                     bdc_stack.append(is_size)
                     output.append(line)
                     if is_size:
-                        output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm')
+                        waiting_for_wn = True
+                    continue
+
+                if waiting_for_wn and s == 'W n':
+                    output.append(line)
+                    output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} 0 0 cm')
+                    waiting_for_wn = False
                     continue
 
                 if s == 'EMC':
