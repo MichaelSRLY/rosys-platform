@@ -174,50 +174,37 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	// Cap scaling at 4% — validated by pattern expert as max for clean output
 	// (no piece overlap, seam allowances stay accurate, no edge clipping)
+	// Cap scaling at 4% — validated by pattern expert as max for clean output
+	// (no piece overlap, seam allowances stay accurate, no edge clipping)
 	const scalePct = Math.abs(grading.pdf_scale_width - 1);
 	if (scalePct > 0.04) {
-		// Check if grade rules exist — if so, use per-vertex grading instead of rejecting
+		// Check if grade rules exist — show info but DON'T generate yet
+		// (grade-pattern-pdf.py needs further debugging before production use)
 		const gradeRulesRow = await loadGradeRules(pattern_slug);
+		const hasGradeRules = !!gradeRulesRow;
+		let gradeInfo: Record<string, unknown> = {};
 		if (gradeRulesRow) {
 			const stepResult = await computeGradeSteps(
 				pattern_slug,
 				{ bust_cm: bust, waist_cm: waist, hip_cm: hip },
 				gradeRulesRow
 			);
-
-			if (stepResult && stepResult.steps_beyond > 0) {
-				// Grade rules available — compute per-piece blended targets
-				// No hard cap — the grade rules are linear with 0.0000pt error.
-				// Above 5 steps we show a soft warning but still generate the pattern.
-				const gradeTarget = computeTargetCoords(gradeRulesRow.grade_data, stepResult);
-
-				// Return grading info with per-measurement data (no error = frontend shows files)
-				if (!generate) {
-					return json({
-						grading,
-						grading_method: 'grade_rules',
-						steps_beyond: stepResult.steps_beyond,
-						bust_steps: stepResult.bust_steps,
-						waist_steps: stepResult.waist_steps,
-						hip_steps: stepResult.hip_steps,
-						largest_size: stepResult.largest_size,
-						piece_steps: gradeTarget.pieces.map(p => ({ i: p.index, s: p.piece_steps, sw: +(p.scale_w.toFixed(4)), sh: +(p.scale_h.toFixed(4)) })),
-						high_extrapolation: stepResult.steps_beyond > 5
-					});
-				}
-
-				// Generate files using grade-pattern-pdf.py
-				return await generateGradedFiles(
-					pattern_slug, grading, gradeRulesRow, gradeTarget,
-					stepResult, bust, waist, hip, format
-				);
+			if (stepResult) {
+				gradeInfo = {
+					grading_method: 'grade_rules_available',
+					steps_beyond: stepResult.steps_beyond,
+					bust_steps: stepResult.bust_steps,
+					waist_steps: stepResult.waist_steps,
+					hip_steps: stepResult.hip_steps,
+					largest_size: stepResult.largest_size
+				};
 			}
 		}
 
-		// No grade rules or computation failed — return existing "too large" error
 		return json({
 			grading,
 			scale_pct: +(scalePct * 100).toFixed(1),
+			...gradeInfo,
 			error: `Your measurements are ${(scalePct * 100).toFixed(0)}% beyond the nearest size (${grading.target_size}). Custom-fit patterns work best within 4% adjustment. For larger differences, we recommend downloading the nearest standard size and making manual alterations.`
 		});
 	}
