@@ -187,6 +187,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			);
 
 			if (stepResult && stepResult.steps_beyond > 0) {
+				// Cap grade-rule scaling at 8% — beyond this pieces overlap on the page
+				if (scalePct > 0.08) {
+					return json({
+						grading,
+						scale_pct: +(scalePct * 100).toFixed(1),
+						grading_method: 'grade_rules_exceeded',
+						steps_beyond: stepResult.steps_beyond,
+						error: `Your measurements are ${(scalePct * 100).toFixed(0)}% beyond size ${grading.target_size}. Per-piece grading works up to 8% — beyond that, pattern pieces overlap on the page. We recommend downloading the standard ${grading.target_size} size and applying manual alterations.`
+					});
+				}
+
 				// Compute per-piece scale factors from grade rules
 				const gradeTarget = computeTargetCoords(gradeRulesRow.grade_data, stepResult);
 				const pieceScales: [number, number][] = gradeTarget.pieces.map(p => [
