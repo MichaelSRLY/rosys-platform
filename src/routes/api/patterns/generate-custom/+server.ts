@@ -199,10 +199,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				}
 
 				// Compute per-piece scale factors from grade rules
+				// Cap each piece at the uniform scale — per-piece can reduce but never exceed uniform
 				const gradeTarget = computeTargetCoords(gradeRulesRow.grade_data, stepResult);
+				const maxSw = grading.pdf_scale_width;
+				const maxSh = grading.pdf_scale_height;
 				const pieceScales: [number, number][] = gradeTarget.pieces.map(p => [
-					Math.round(p.scale_w * 10000) / 10000,
-					Math.round(p.scale_h * 10000) / 10000
+					Math.round(Math.min(p.scale_w, maxSw) * 10000) / 10000,
+					Math.round(Math.min(p.scale_h, maxSh) * 10000) / 10000
 				]);
 
 				// Preview — return grading info (no error = frontend shows downloads)
@@ -215,7 +218,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						waist_steps: stepResult.waist_steps,
 						hip_steps: stepResult.hip_steps,
 						largest_size: stepResult.largest_size,
-						piece_steps: gradeTarget.pieces.map(p => ({ i: p.index, s: p.piece_steps, sw: +(p.scale_w.toFixed(4)), sh: +(p.scale_h.toFixed(4)) })),
+						piece_steps: gradeTarget.pieces.map(p => ({ i: p.index, s: p.piece_steps, sw: +(Math.min(p.scale_w, maxSw).toFixed(4)), sh: +(Math.min(p.scale_h, maxSh).toFixed(4)) })),
 						high_extrapolation: stepResult.steps_beyond > 5
 					});
 				}
