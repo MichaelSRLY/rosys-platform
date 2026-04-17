@@ -182,6 +182,51 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
                             in_piece = False; continue
                     p_lines.append(line)
 
+            # Group paired pieces (cutting line + seam allowance) by anchor proximity.
+            # Pairs must share the SAME center so they shift identically and stay aligned.
+            if piece_scales and len(piece_centers) > 1:
+                # Also collect anchors from Pass 1 for grouping
+                piece_anchors = []
+                _in_t = False; _in_p = False
+                for line in lines:
+                    s = line.strip()
+                    if target_mc and (f'/{target_mc} BDC' in s or f'/{target_mc} ' in s and s.endswith('BDC')):
+                        _in_t = True; continue
+                    if s == 'EMC' and _in_t:
+                        _in_t = False; continue
+                    if _in_t and not _in_p:
+                        _m = PIECE_RE.match(s)
+                        if _m:
+                            piece_anchors.append((float(_m.group(1)), float(_m.group(2))))
+                            _in_p = True; continue
+                    if _in_t and _in_p:
+                        if s == 'Q' or (s.startswith('Q') and len(s) == 1):
+                            _in_p = False
+
+                # Group by anchor proximity (< 100pt = same garment piece)
+                import math as _math
+                groups = []  # [[idx, idx, ...], ...]
+                assigned = set()
+                for i in range(len(piece_anchors)):
+                    if i in assigned: continue
+                    grp = [i]; assigned.add(i)
+                    for j in range(i+1, len(piece_anchors)):
+                        if j in assigned: continue
+                        dist = _math.sqrt((piece_anchors[i][0]-piece_anchors[j][0])**2 + (piece_anchors[i][1]-piece_anchors[j][1])**2)
+                        if dist < 100:
+                            grp.append(j); assigned.add(j)
+                    groups.append(grp)
+
+                # Compute shared center for each group (average of all coordinates in group)
+                shared_centers = list(piece_centers)  # copy
+                for grp in groups:
+                    if len(grp) < 2: continue
+                    avg_cx = sum(piece_centers[i][0] for i in grp) / len(grp)
+                    avg_cy = sum(piece_centers[i][1] for i in grp) / len(grp)
+                    for i in grp:
+                        shared_centers[i] = (avg_cx, avg_cy)
+                piece_centers = shared_centers
+
             # Pass 2: rewrite all size layer transforms with centered scaling
             output = []
             bdc_stack = []
