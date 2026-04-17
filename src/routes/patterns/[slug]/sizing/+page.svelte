@@ -749,8 +749,13 @@
 
 								{#if customFitGrading?.scale_pct && customFitGrading?.grading_method !== 'grade_rules'}
 									<div class="info-box mb-3" style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 10px; padding: 12px 14px; font-size: 13px; color: #92400e; line-height: 1.5;">
-										<strong>Adjustment too large ({customFitGrading.scale_pct}%)</strong><br>
-										Your measurements differ more than 4% from size {customFitGrading.target_size}. No grade rules available for this pattern — proportional scaling would distort seam allowances.
+										{#if customFitGrading?.grading_method === 'grade_rules_exceeded'}
+											<strong>Beyond grading range ({customFitGrading.steps_beyond?.toFixed(1)} size steps beyond {customFitGrading.target_size})</strong><br>
+											Grade rules exist but your measurements require too many extrapolation steps (max 3). At this distance, even per-vertex grading may produce inaccurate results.
+										{:else}
+											<strong>Adjustment too large ({customFitGrading.scale_pct}%)</strong><br>
+											No grade rules available for this pattern — proportional scaling would distort seam allowances at this level.
+										{/if}
 										<br><br>
 										<strong>What you can do:</strong> Download the standard <strong>{customFitGrading.target_size}</strong> size above and apply the alterations listed in the AI recommendation manually.
 									</div>
