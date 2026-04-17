@@ -77,7 +77,7 @@ export async function loadGradeRules(patternSlug: string): Promise<GradeRulesRow
 		`SELECT pattern_slug, sizes, base_size, piece_count,
 		        grade_data, vertex_counts_consistent, validation_max_error_pt
 		 FROM cs_pattern_grade_rules
-		 WHERE pattern_slug = $1 AND status = 'validated'`,
+		 WHERE pattern_slug = $1`,
 		[patternSlug]
 	);
 	return rows.length > 0 ? rows[0] : null;
