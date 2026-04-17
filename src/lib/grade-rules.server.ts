@@ -222,27 +222,35 @@ export function computeTargetCoords(
 	const minSteps = Math.min(bust_steps, waist_steps, hip_steps);
 	const maxSteps = Math.max(bust_steps, waist_steps, hip_steps);
 
-	// First pass: compute each piece's average width growth per step
+	// First pass: compute each piece's actual bbox width growth per step
+	// by comparing bbox at base size vs bbox at largest size
 	const pieceGrowthRates: number[] = [];
 	for (const piece of gradeRules.pieces) {
-		// Compute how much this piece's bbox WIDTH changes per step (last few steps)
-		let totalWidthGrowth = 0;
+		// Compute base size bbox width
+		const baseXs = piece.base_coords.map(c => c[0]);
+		const baseBboxW = baseXs.length > 0 ? Math.max(...baseXs) - Math.min(...baseXs) : 0;
+
+		// Reconstruct largest size coords and compute its bbox width
+		let largestBboxW = baseBboxW;
 		if (piece.consistent && piece.coord_deltas.every(d => d !== null)) {
-			for (let s = startStep; s < numSteps; s++) {
+			const largestCoords = piece.base_coords.map(c => [...c] as [number, number]);
+			for (let s = 0; s < numSteps; s++) {
 				const deltas = piece.coord_deltas[s]!;
-				// Width growth = range of x-deltas (max dx - min dx gives expansion)
-				const dxs = deltas.map(d => d[0]);
-				const maxDx = Math.max(...dxs);
-				const minDx = Math.min(...dxs);
-				totalWidthGrowth += (maxDx - minDx);
+				for (let k = 0; k < largestCoords.length; k++) {
+					largestCoords[k][0] += deltas[k][0];
+					largestCoords[k][1] += deltas[k][1];
+				}
 			}
-		} else {
-			// For inconsistent pieces, use anchor x-delta as proxy
-			for (let s = startStep; s < numSteps; s++) {
-				totalWidthGrowth += Math.abs(piece.anchor_deltas[s][0]);
-			}
+			const largestXs = largestCoords.map(c => c[0]);
+			largestBboxW = largestXs.length > 0 ? Math.max(...largestXs) - Math.min(...largestXs) : 0;
+		} else if (piece.per_size_coords && piece.per_size_coords[largestSize]) {
+			const lxs = piece.per_size_coords[largestSize].map(c => c[0]);
+			largestBboxW = lxs.length > 0 ? Math.max(...lxs) - Math.min(...lxs) : 0;
 		}
-		pieceGrowthRates.push(totalWidthGrowth / avgWindow);
+
+		// Growth rate = how much wider the piece got per step (in absolute pts)
+		const widthGrowth = baseBboxW > 0 ? (largestBboxW - baseBboxW) / numSteps : 0;
+		pieceGrowthRates.push(Math.max(0, widthGrowth));
 	}
 
 	// Normalize growth rates to [0, 1] range
