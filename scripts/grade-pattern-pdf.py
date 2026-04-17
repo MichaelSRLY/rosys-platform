@@ -180,16 +180,22 @@ def toggle_ocg_layers(pdf, target_size):
         })
 
 
-def grade_page(page, target_size, targets, verbose=False):
+def grade_page(page, target_size, targets, verbose=False, page_num=0, debug=False, piece_idx_start=0):
     """Apply per-vertex grade rules to a single PDF page.
 
     Modifies actual m/l/c coordinates inside the target size layer,
     and updates piece anchor transforms. Layer 1 is untouched.
+
+    piece_idx_start — starting index into the global targets list. Pieces on this
+    page consume targets[piece_idx_start:]. Returns (graded_count, next_piece_idx)
+    so the caller can advance across pages.
     """
     page.contents_coalesce()
     raw = page['/Contents'].read_bytes()
     content = raw.decode('latin-1')
     lines = content.split('\n')
+    if debug:
+        print(f"\n[DEBUG page {page_num}] {len(lines)} content lines, targets[{piece_idx_start}:{len(targets)}] available")
 
     # Find MC references
     props = page.get('/Resources', pikepdf.Dictionary()).get('/Properties', pikepdf.Dictionary())
@@ -217,9 +223,13 @@ def grade_page(page, target_size, targets, verbose=False):
     in_target = False
     in_piece = False
     q_depth = 0
-    piece_idx = 0
+    piece_idx = piece_idx_start
     coord_idx = 0
     graded_pieces = 0
+    # Debug counters
+    dbg_target_bdc_enters = 0
+    dbg_piece_ops_counter = {'m': 0, 'l': 0, 'c': 0}
+    dbg_current_piece_target_count = 0
 
     for line in lines:
         s = line.strip()
@@ -231,7 +241,9 @@ def grade_page(page, target_size, targets, verbose=False):
             bdc_stack.append({'is_target': is_target, 'is_size': is_size})
             if is_target:
                 in_target = True
-                piece_idx = 0
+                dbg_target_bdc_enters += 1
+                if debug:
+                    print(f"[DEBUG page {page_num}] target BDC enter #{dbg_target_bdc_enters} — piece_idx continues at {piece_idx}")
             output.append(line)
             continue
 
@@ -252,11 +264,16 @@ def grade_page(page, target_size, targets, verbose=False):
                 # Replace anchor with target anchor
                 target = targets[piece_idx]
                 ax, ay = target['anchor']
+                src_ax, src_ay = float(m.group(1)), float(m.group(2))
                 output.append(f'q 1 0 0 1 {ax:.4f} {ay:.4f} cm')
                 in_piece = True
                 q_depth = 1
                 coord_idx = 0
                 graded_pieces += 1
+                dbg_piece_ops_counter = {'m': 0, 'l': 0, 'c': 0}
+                dbg_current_piece_target_count = len(target.get('coords', []))
+                if debug:
+                    print(f"[DEBUG page {page_num}] ENTER piece_idx={piece_idx}  src_anchor=({src_ax:.2f},{src_ay:.2f})  tgt_anchor=({ax:.2f},{ay:.2f})  target_coords={dbg_current_piece_target_count}")
                 continue
 
         if in_target and in_piece:
@@ -268,6 +285,12 @@ def grade_page(page, target_size, targets, verbose=False):
                 q_depth -= 1
                 if q_depth == 0:
                     in_piece = False
+                    if debug:
+                        ops = dbg_piece_ops_counter
+                        total_consumed = ops['m'] + ops['l'] + ops['c'] * 3
+                        overflow = coord_idx > dbg_current_piece_target_count
+                        marker = "  ⚠ OVERFLOW" if overflow else ""
+                        print(f"[DEBUG page {page_num}] CLOSE piece_idx={piece_idx}  ops(m={ops['m']},l={ops['l']},c={ops['c']})  coord_idx_end={coord_idx}/{dbg_current_piece_target_count}{marker}")
                     piece_idx += 1
                     output.append(line)
                     continue
@@ -286,6 +309,7 @@ def grade_page(page, target_size, targets, verbose=False):
                 c3 = target_coords[coord_idx + 2]
                 output.append(f'{c1[0]:.4f} {c1[1]:.4f} {c2[0]:.4f} {c2[1]:.4f} {c3[0]:.4f} {c3[1]:.4f} c')
                 coord_idx += 3
+                dbg_piece_ops_counter['c'] += 1
                 continue
 
             mm = MOVE_RE.match(s)
@@ -293,6 +317,7 @@ def grade_page(page, target_size, targets, verbose=False):
                 c = target_coords[coord_idx]
                 output.append(f'{c[0]:.4f} {c[1]:.4f} m')
                 coord_idx += 1
+                dbg_piece_ops_counter['m'] += 1
                 continue
 
             lm = LINE_RE.match(s)
@@ -300,6 +325,7 @@ def grade_page(page, target_size, targets, verbose=False):
                 c = target_coords[coord_idx]
                 output.append(f'{c[0]:.4f} {c[1]:.4f} l')
                 coord_idx += 1
+                dbg_piece_ops_counter['l'] += 1
                 continue
 
             # Non-coordinate line (stroke, fill, color, etc.) — pass through
@@ -321,7 +347,7 @@ def grade_page(page, target_size, targets, verbose=False):
     if verbose:
         print(f"  Page: graded {graded_pieces} pieces")
 
-    return graded_pieces
+    return graded_pieces, piece_idx
 
 
 def main():
@@ -338,6 +364,7 @@ def main():
     parser.add_argument("--piece-steps", help="JSON array of per-piece step counts (overrides --steps per piece)")
     parser.add_argument("--output", "-o", required=True, help="Output PDF path")
     parser.add_argument("--verbose", "-v", action="store_true")
+    parser.add_argument("--debug", action="store_true", help="Print per-piece diagnostics (piece_idx reset, target coord counts, overflow)")
     args = parser.parse_args()
 
     # Load grade rules
@@ -391,10 +418,12 @@ def main():
     # Toggle OCG layers
     toggle_ocg_layers(pdf, args.size)
 
-    # Grade each page
+    # Grade each page — piece_idx advances globally across pages
     total_graded = 0
+    piece_idx = 0
     for i, page in enumerate(pdf.pages):
-        graded = grade_page(page, args.size, targets, verbose=args.verbose)
+        graded, piece_idx = grade_page(page, args.size, targets, verbose=args.verbose,
+                                       page_num=i, debug=args.debug, piece_idx_start=piece_idx)
         total_graded += graded
         if args.verbose and graded > 0:
             print(f"  Page {i}: {graded} pieces graded")

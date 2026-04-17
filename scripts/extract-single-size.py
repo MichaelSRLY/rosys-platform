@@ -99,6 +99,10 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
     if scale_w is not None and scale_h is not None and (abs(scale_w - 1) > 0.001 or abs(scale_h - 1) > 0.001):
         size_names_upper = {s.upper() for s in ALL_SIZES}
 
+        # Offset into piece_scales (grade-rule per-piece list), advances across pages
+        # so multi-page PDFs correctly index into the global grade_data pieces list.
+        global_piece_offset = 0
+
         for page in pdf.pages:
             page.contents_coalesce()
             raw = page['/Contents'].read_bytes()
@@ -255,9 +259,11 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
                     if m:
                         x = float(m.group(1))
                         y = float(m.group(2))
-                        # Per-piece scale factors (from grade rules) or uniform fallback
-                        if piece_scales and piece_seq < len(piece_scales):
-                            psw, psh = piece_scales[piece_seq]
+                        # Per-piece scale factors (from grade rules) or uniform fallback.
+                        # piece_scales is a flat global list indexed by page-order; use offset.
+                        global_idx = global_piece_offset + piece_seq
+                        if piece_scales and global_idx < len(piece_scales):
+                            psw, psh = piece_scales[global_idx]
                         else:
                             psw, psh = scale_w, scale_h
                         if piece_seq < len(piece_centers):
@@ -275,6 +281,9 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
 
             page['/Contents'] = pdf.make_stream('\n'.join(output).encode('latin-1'))
             print(f"  Center-scaled {scaled_count} piece transforms ({len(piece_centers)} centers), Layer 1 untouched")
+
+            # Advance global piece offset for next page's piece_scales lookup
+            global_piece_offset += len(piece_centers)
 
     pdf.save(output_path, linearize=True)
     pdf.close()

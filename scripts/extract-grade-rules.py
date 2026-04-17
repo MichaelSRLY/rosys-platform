@@ -133,75 +133,92 @@ def extract_path_coords(piece_lines):
     return coords
 
 
-def extract_all_sizes(pdf_path):
-    """Extract piece geometry for every size layer in a multi-size PDF.
+def extract_pieces_from_page(lines, target_mc):
+    """Extract piece geometry for a specific MC reference from one page's content stream.
 
-    Returns: {size_name: [{'anchor': (x,y), 'coords': [(x,y,op), ...]}]}
+    Returns list of {'anchor': (x,y), 'coords': [(x,y,op), ...]} in source order.
     """
-    pdf = pikepdf.open(pdf_path)
+    pieces = []
+    in_target = False
+    in_piece = False
+    q_depth = 0
+    piece_lines = []
+    anchor = (0.0, 0.0)
 
-    # We process page 0 (A0 PDFs are typically single-page)
-    page = pdf.pages[0]
-    mc_map = get_mc_to_size_map(page)
+    for line in lines:
+        s = line.strip()
 
-    if not mc_map:
-        return {}
+        # Detect BDC for this specific MC reference
+        if f'/{target_mc} BDC' in s or (s.endswith('BDC') and f'/{target_mc} ' in s):
+            in_target = True
+            continue
 
-    # Get content stream
-    page.contents_coalesce()
-    raw = page['/Contents'].read_bytes()
-    lines = raw.decode('latin-1').split('\n')
+        if s == 'EMC' and in_target:
+            if in_piece:
+                coords = extract_path_coords(piece_lines)
+                pieces.append({'anchor': anchor, 'coords': coords})
+                in_piece = False
+            in_target = False
+            continue
 
-    # Build reverse map: mc_name -> size
-    size_data = {}  # {size: [pieces]}
-
-    for target_mc, size_name in mc_map.items():
-        pieces = []
-        in_target = False
-        in_piece = False
-        q_depth = 0
-        piece_lines = []
-        anchor = (0.0, 0.0)
-
-        for line in lines:
-            s = line.strip()
-
-            # Detect BDC for this specific MC reference
-            if f'/{target_mc} BDC' in s or (s.endswith('BDC') and f'/{target_mc} ' in s):
-                in_target = True
+        if in_target and not in_piece:
+            m = PIECE_RE.match(s)
+            if m:
+                anchor = (float(m.group(1)), float(m.group(2)))
+                in_piece = True
+                q_depth = 1
+                piece_lines = []
                 continue
 
-            if s == 'EMC' and in_target:
-                if in_piece:
+        if in_target and in_piece:
+            if s.startswith('q'):
+                q_depth += 1
+            elif s == 'Q':
+                q_depth -= 1
+                if q_depth == 0:
                     coords = extract_path_coords(piece_lines)
                     pieces.append({'anchor': anchor, 'coords': coords})
                     in_piece = False
-                in_target = False
-                continue
-
-            if in_target and not in_piece:
-                m = PIECE_RE.match(s)
-                if m:
-                    anchor = (float(m.group(1)), float(m.group(2)))
-                    in_piece = True
-                    q_depth = 1
-                    piece_lines = []
                     continue
+            piece_lines.append(line)
 
-            if in_target and in_piece:
-                if s.startswith('q'):
-                    q_depth += 1
-                elif s == 'Q':
-                    q_depth -= 1
-                    if q_depth == 0:
-                        coords = extract_path_coords(piece_lines)
-                        pieces.append({'anchor': anchor, 'coords': coords})
-                        in_piece = False
-                        continue
-                piece_lines.append(line)
+    return pieces
 
-        if pieces:
-            size_data[size_name] = pieces
+
+def extract_all_sizes(pdf_path):
+    """Extract piece geometry for every size layer across ALL pages of a multi-size PDF.
+
+    Pieces are concatenated in page order — page 0 pieces first, then page 1, etc.
+    Each piece is tagged with its source page number.
+
+    For single-page PDFs this produces the same output as the original implementation
+    (minus the new 'page' key on each piece, which is always 0).
+
+    Returns: {size_name: [{'anchor': (x,y), 'coords': [...], 'page': int}, ...]}
+    """
+    pdf = pikepdf.open(pdf_path)
+    size_data = {}  # {size: [pieces]}
+
+    for page_num, page in enumerate(pdf.pages):
+        mc_map = get_mc_to_size_map(page)
+        if not mc_map:
+            continue
+
+        # Get content stream for this page
+        page.contents_coalesce()
+        raw = page['/Contents'].read_bytes()
+        lines = raw.decode('latin-1').split('\n')
+
+        for target_mc, size_name in mc_map.items():
+            pieces_on_page = extract_pieces_from_page(lines, target_mc)
+
+            # Tag each piece with source page
+            for p in pieces_on_page:
+                p['page'] = page_num
+
+            if size_name not in size_data:
+                size_data[size_name] = []
+            size_data[size_name].extend(pieces_on_page)
 
     pdf.close()
     return size_data
@@ -317,6 +334,7 @@ def compute_grade_rules(size_data, verbose=False):
 
         piece_rule = {
             'index': pi,
+            'page': base_piece.get('page', 0),
             'vertex_count': base_count,
             'consistent': consistent,
             'base_anchor': [round(base_anchor[0], 4), round(base_anchor[1], 4)],
