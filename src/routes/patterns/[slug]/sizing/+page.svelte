@@ -427,7 +427,7 @@
 								{#if deterministicResult?.ease}
 									<div class="an-data-row">
 										<span>Ease at {recommendedSize || deterministicResult?.recommended_size}</span>
-										<span>{deterministicResult.ease.bust_cm != null ? `Bust ${deterministicResult.ease.bust_cm > 0 ? '+' : ''}${deterministicResult.ease.bust_cm.toFixed(0)}cm` : ''}</span>
+										<span>{[deterministicResult.ease.bust_cm != null ? `Bust ${deterministicResult.ease.bust_cm > 0 ? '+' : ''}${deterministicResult.ease.bust_cm.toFixed(0)}cm` : '', deterministicResult.ease.waist_cm != null ? `Waist ${deterministicResult.ease.waist_cm > 0 ? '+' : ''}${deterministicResult.ease.waist_cm.toFixed(0)}cm` : '', deterministicResult.ease.hip_cm != null ? `Hip ${deterministicResult.ease.hip_cm > 0 ? '+' : ''}${deterministicResult.ease.hip_cm.toFixed(0)}cm` : ''].filter(Boolean).join(' · ')}</span>
 									</div>
 								{/if}
 								{#if chartData?.finished?.length > 0}
@@ -437,6 +437,18 @@
 											<span>Finished bust</span>
 											<span>{recFinished.bust_cm}cm</span>
 										</div>
+										{#if recFinished.waist_cm}
+										<div class="an-data-row">
+											<span>Finished waist</span>
+											<span>{recFinished.waist_cm}cm</span>
+										</div>
+										{/if}
+										{#if recFinished.hip_cm}
+										<div class="an-data-row">
+											<span>Finished hip</span>
+											<span>{recFinished.hip_cm}cm</span>
+										</div>
+										{/if}
 										{#if recFinished.full_length_cm}
 											<div class="an-data-row">
 												<span>Garment length</span>
