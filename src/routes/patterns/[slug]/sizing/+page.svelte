@@ -175,7 +175,7 @@
 			let res = await fetch('/api/patterns/generate-custom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pattern_slug: pattern.pattern_slug, bust: parseFloat(bust), waist: parseFloat(waist), hip: parseFloat(hip) }) });
 			if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Failed');
 			const json = await res.json();
-			customFitGrading = { ...json.grading, scale_pct: json.scale_pct, grading_method: json.grading_method, steps_beyond: json.steps_beyond, bust_steps: json.bust_steps, waist_steps: json.waist_steps, hip_steps: json.hip_steps, largest_size: json.largest_size, piece_steps: json.piece_steps }; customFitError = json.error || '';
+			customFitGrading = { ...json.grading, scale_pct: json.scale_pct, grading_method: json.grading_method, steps_beyond: json.steps_beyond, bust_steps: json.bust_steps, waist_steps: json.waist_steps, hip_steps: json.hip_steps, largest_size: json.largest_size, piece_steps: json.piece_steps, high_extrapolation: json.high_extrapolation }; customFitError = json.error || '';
 
 			// Then generate all formats to get file list
 			if (!customFitError) {
@@ -774,10 +774,17 @@
 								{:else if customFitError}<div class="err-box mb-3">{customFitError}</div>
 								{:else}
 									{#if customFitGrading?.grading_method === 'grade_rules'}
-										<div class="info-box mb-3" style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 10px; padding: 12px 14px; font-size: 13px; color: #065f46; line-height: 1.5;">
-											<strong>Per-vertex graded pattern</strong> — {customFitGrading.steps_beyond?.toFixed(1)} size steps beyond {customFitGrading.largest_size || '2XL'}<br>
-											Each piece individually shaped using Rosa's original grading rules. Seam allowances and proportions are accurate — not uniformly stretched.
-										</div>
+										{#if customFitGrading.high_extrapolation}
+											<div class="info-box mb-3" style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 10px; padding: 12px 14px; font-size: 13px; color: #92400e; line-height: 1.5;">
+												<strong>Extended grading</strong> — {customFitGrading.steps_beyond?.toFixed(1)} size steps beyond {customFitGrading.largest_size || '2XL'}<br>
+												This is a significant extrapolation. The pattern pieces are graded using per-vertex rules so proportions and seam allowances remain accurate. We recommend verifying the fit with a test garment (muslin) before cutting your final fabric.
+											</div>
+										{:else}
+											<div class="info-box mb-3" style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 10px; padding: 12px 14px; font-size: 13px; color: #065f46; line-height: 1.5;">
+												<strong>Per-vertex graded pattern</strong> — {customFitGrading.steps_beyond?.toFixed(1)} size steps beyond {customFitGrading.largest_size || '2XL'}<br>
+												Each piece individually shaped using Rosa's original grading rules. Seam allowances and proportions are accurate.
+											</div>
+										{/if}
 									{/if}
 									<span class="card-label mb-2 block">Download custom-fit pattern</span>
 									<div class="dl-grid">

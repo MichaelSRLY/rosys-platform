@@ -186,18 +186,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			);
 
 			if (stepResult && stepResult.steps_beyond > 0) {
-				// Cap at 3 grade steps for safety
-				if (stepResult.steps_beyond > 3) {
-					return json({
-						grading,
-						scale_pct: +(scalePct * 100).toFixed(1),
-						grading_method: 'grade_rules_exceeded',
-						steps_beyond: stepResult.steps_beyond,
-						error: `Your measurements require ${stepResult.steps_beyond.toFixed(1)} size steps beyond ${stepResult.largest_size}. Grade-rule grading supports up to 3 extra steps. For measurements this far beyond the range, we recommend consulting with a seamstress for manual alterations.`
-					});
-				}
-
 				// Grade rules available — compute per-piece blended targets
+				// No hard cap — the grade rules are linear with 0.0000pt error.
+				// Above 5 steps we show a soft warning but still generate the pattern.
 				const gradeTarget = computeTargetCoords(gradeRulesRow.grade_data, stepResult);
 
 				// Return grading info with per-measurement data (no error = frontend shows files)
@@ -210,7 +201,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						waist_steps: stepResult.waist_steps,
 						hip_steps: stepResult.hip_steps,
 						largest_size: stepResult.largest_size,
-						piece_steps: gradeTarget.pieces.map(p => ({ i: p.index, s: p.piece_steps, sw: +(p.scale_w.toFixed(4)), sh: +(p.scale_h.toFixed(4)) }))
+						piece_steps: gradeTarget.pieces.map(p => ({ i: p.index, s: p.piece_steps, sw: +(p.scale_w.toFixed(4)), sh: +(p.scale_h.toFixed(4)) })),
+						high_extrapolation: stepResult.steps_beyond > 5
 					});
 				}
 
