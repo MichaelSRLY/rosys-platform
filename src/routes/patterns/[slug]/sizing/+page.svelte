@@ -175,7 +175,7 @@
 			let res = await fetch('/api/patterns/generate-custom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pattern_slug: pattern.pattern_slug, bust: parseFloat(bust), waist: parseFloat(waist), hip: parseFloat(hip) }) });
 			if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Failed');
 			const json = await res.json();
-			customFitGrading = { ...json.grading, scale_pct: json.scale_pct, grading_method: json.grading_method, steps_beyond: json.steps_beyond }; customFitError = json.error || '';
+			customFitGrading = { ...json.grading, scale_pct: json.scale_pct, grading_method: json.grading_method, steps_beyond: json.steps_beyond, largest_size: json.largest_size }; customFitError = json.error || '';
 
 			// Then generate all formats to get file list
 			if (!customFitError) {
@@ -734,19 +734,29 @@
 										{/each}</tbody>
 									</table>
 								</div>
-								{#if customFitGrading?.scale_pct}
+								<!-- Debug: show grading method -->
+								<div class="mb-3" style="background: #f0f4ff; border: 1px solid #6366f1; border-radius: 10px; padding: 10px 14px; font-size: 12px; color: #3730a3; line-height: 1.6; font-family: monospace;">
+									<strong>Method:</strong> {customFitGrading?.grading_method === 'grade_rules' ? 'Per-vertex grade rules' : customFitGrading?.grading_method === 'grade_rules_exceeded' ? 'Grade rules (exceeded max)' : customFitGrading?.scale_pct ? `Uniform scale (${customFitGrading.scale_pct}%)` : 'Uniform scale (within 4%)'}<br>
+									{#if customFitGrading?.grading_method === 'grade_rules'}
+										<strong>Steps beyond {customFitGrading.largest_size || '2XL'}:</strong> {customFitGrading.steps_beyond?.toFixed(1) || '—'}<br>
+									{/if}
+									<strong>Nearest size:</strong> {customFitGrading.target_size} &middot;
+									<strong>Scale:</strong> W={customFitGrading.pdf_scale_width?.toFixed(4) || '—'} H={customFitGrading.pdf_scale_height?.toFixed(4) || '—'}
+								</div>
+
+								{#if customFitGrading?.scale_pct && customFitGrading?.grading_method !== 'grade_rules'}
 									<div class="info-box mb-3" style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 10px; padding: 12px 14px; font-size: 13px; color: #92400e; line-height: 1.5;">
 										<strong>Adjustment too large ({customFitGrading.scale_pct}%)</strong><br>
-										Your measurements differ more than 4% from size {customFitGrading.target_size}. At this level, proportional scaling may distort seam allowances and pattern details.
+										Your measurements differ more than 4% from size {customFitGrading.target_size}. No grade rules available for this pattern — proportional scaling would distort seam allowances.
 										<br><br>
-										<strong>What you can do:</strong> Download the standard <strong>{customFitGrading.target_size}</strong> size above and apply the alterations listed in the AI recommendation manually — this gives the most accurate fit.
+										<strong>What you can do:</strong> Download the standard <strong>{customFitGrading.target_size}</strong> size above and apply the alterations listed in the AI recommendation manually.
 									</div>
 								{:else if customFitError}<div class="err-box mb-3">{customFitError}</div>
 								{:else}
 									{#if customFitGrading?.grading_method === 'grade_rules'}
 										<div class="info-box mb-3" style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 10px; padding: 12px 14px; font-size: 13px; color: #065f46; line-height: 1.5;">
-											<strong>Custom graded pattern</strong><br>
-											Your pattern has been precisely graded using per-piece rules — each piece is individually shaped for your measurements, not just scaled. This gives you accurate seam allowances and proper proportions.
+											<strong>Per-vertex graded pattern</strong> — {customFitGrading.steps_beyond?.toFixed(1)} size steps beyond {customFitGrading.largest_size || '2XL'}<br>
+											Each piece individually shaped using Rosa's original grading rules. Seam allowances and proportions are accurate — not uniformly stretched.
 										</div>
 									{/if}
 									<span class="card-label mb-2 block">Download custom-fit pattern</span>
