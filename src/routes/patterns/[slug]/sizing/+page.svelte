@@ -175,7 +175,7 @@
 			let res = await fetch('/api/patterns/generate-custom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pattern_slug: pattern.pattern_slug, bust: parseFloat(bust), waist: parseFloat(waist), hip: parseFloat(hip) }) });
 			if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Failed');
 			const json = await res.json();
-			customFitGrading = { ...json.grading, scale_pct: json.scale_pct, grading_method: json.grading_method, steps_beyond: json.steps_beyond, largest_size: json.largest_size }; customFitError = json.error || '';
+			customFitGrading = { ...json.grading, scale_pct: json.scale_pct, grading_method: json.grading_method, steps_beyond: json.steps_beyond, bust_steps: json.bust_steps, waist_steps: json.waist_steps, hip_steps: json.hip_steps, largest_size: json.largest_size, piece_steps: json.piece_steps }; customFitError = json.error || '';
 
 			// Then generate all formats to get file list
 			if (!customFitError) {
@@ -736,12 +736,15 @@
 								</div>
 								<!-- Debug: show grading method -->
 								<div class="mb-3" style="background: #f0f4ff; border: 1px solid #6366f1; border-radius: 10px; padding: 10px 14px; font-size: 12px; color: #3730a3; line-height: 1.6; font-family: monospace;">
-									<strong>Method:</strong> {customFitGrading?.grading_method === 'grade_rules' ? 'Per-vertex grade rules' : customFitGrading?.grading_method === 'grade_rules_exceeded' ? 'Grade rules (exceeded max)' : customFitGrading?.scale_pct ? `Uniform scale (${customFitGrading.scale_pct}%)` : 'Uniform scale (within 4%)'}<br>
-									{#if customFitGrading?.grading_method === 'grade_rules'}
-										<strong>Steps beyond {customFitGrading.largest_size || '2XL'}:</strong> {customFitGrading.steps_beyond?.toFixed(1) || '—'}<br>
-									{/if}
+									<strong>Method:</strong> {customFitGrading?.grading_method === 'grade_rules' ? 'Per-vertex grade rules (per-piece blended)' : customFitGrading?.grading_method === 'grade_rules_exceeded' ? 'Grade rules (exceeded max)' : customFitGrading?.scale_pct ? `Uniform scale (${customFitGrading.scale_pct}%)` : 'Uniform scale (within 4%)'}<br>
 									<strong>Nearest size:</strong> {customFitGrading.target_size} &middot;
 									<strong>Scale:</strong> W={customFitGrading.pdf_scale_width?.toFixed(4) || '—'} H={customFitGrading.pdf_scale_height?.toFixed(4) || '—'}
+									{#if customFitGrading?.grading_method === 'grade_rules'}
+										<br><strong>Steps beyond {customFitGrading.largest_size || '2XL'}:</strong> bust={customFitGrading.bust_steps ?? '—'} waist={customFitGrading.waist_steps ?? '—'} hip={customFitGrading.hip_steps ?? '—'}
+										{#if customFitGrading.piece_steps?.length}
+											<br><strong>Per-piece:</strong> {customFitGrading.piece_steps.map((p: any) => `#${p.i}:${p.s}steps(${(p.sw*100-100).toFixed(1)}%w)`).join(' ')}
+										{/if}
+									{/if}
 								</div>
 
 								{#if customFitGrading?.scale_pct && customFitGrading?.grading_method !== 'grade_rules'}

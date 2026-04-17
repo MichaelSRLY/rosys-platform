@@ -40,8 +40,12 @@ LINE_RE = re.compile(r'^([\d.eE+-]+)\s+([\d.eE+-]+)\s+l$')
 CURVE_RE = re.compile(r'^([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+c$')
 
 
-def compute_target_from_rules(grade_data, steps_beyond):
+def compute_target_from_rules(grade_data, steps_beyond, per_piece_steps=None):
     """Compute target piece coordinates by extrapolating grade rules.
+
+    If per_piece_steps is provided (list of floats, one per piece), each piece
+    uses its own step count. This enables selective adjustment — bodice pieces
+    get bust-driven steps, skirt pieces get hip-driven steps.
 
     Returns list of {'anchor': (x,y), 'coords': [(x,y), ...]} per piece.
     """
@@ -52,7 +56,7 @@ def compute_target_from_rules(grade_data, steps_beyond):
 
     targets = []
 
-    for piece in grade_data['pieces']:
+    for pi, piece in enumerate(grade_data['pieces']):
         # Reconstruct largest size anchor
         anchor = list(piece['base_anchor'])
         for s in range(num_steps):
@@ -80,10 +84,13 @@ def compute_target_from_rules(grade_data, steps_beyond):
         avg_anchor_d[0] /= avg_window
         avg_anchor_d[1] /= avg_window
 
+        # Per-piece step count (blended) or global fallback
+        piece_steps = per_piece_steps[pi] if per_piece_steps and pi < len(per_piece_steps) else steps_beyond
+
         # Extrapolate anchor
         target_anchor = (
-            anchor[0] + avg_anchor_d[0] * steps_beyond,
-            anchor[1] + avg_anchor_d[1] * steps_beyond
+            anchor[0] + avg_anchor_d[0] * piece_steps,
+            anchor[1] + avg_anchor_d[1] * piece_steps
         )
 
         # Extrapolate coordinates
@@ -99,8 +106,8 @@ def compute_target_from_rules(grade_data, steps_beyond):
                 avg_deltas[k][1] /= avg_window
 
             target_coords = [
-                (coords[k][0] + avg_deltas[k][0] * steps_beyond,
-                 coords[k][1] + avg_deltas[k][1] * steps_beyond)
+                (coords[k][0] + avg_deltas[k][0] * piece_steps,
+                 coords[k][1] + avg_deltas[k][1] * piece_steps)
                 for k in range(len(coords))
             ]
         else:
@@ -109,7 +116,7 @@ def compute_target_from_rules(grade_data, steps_beyond):
             ys = [c[1] for c in coords]
             if xs:
                 bw = max(xs) - min(xs)
-                scale = 1 + (abs(avg_anchor_d[0]) * steps_beyond / bw) if bw > 0 else 1
+                scale = 1 + (abs(avg_anchor_d[0]) * piece_steps / bw) if bw > 0 else 1
                 cx = (min(xs) + max(xs)) / 2
                 cy = (min(ys) + max(ys)) / 2
                 target_coords = [
@@ -328,6 +335,7 @@ def main():
     parser.add_argument("--waist", type=float, help="Customer waist (cm)")
     parser.add_argument("--hip", type=float, help="Customer hip (cm)")
     parser.add_argument("--size", required=True, help="Base size (largest standard, e.g. 2XL)")
+    parser.add_argument("--piece-steps", help="JSON array of per-piece step counts (overrides --steps per piece)")
     parser.add_argument("--output", "-o", required=True, help="Output PDF path")
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
@@ -369,9 +377,13 @@ def main():
     print(f"Grading: {args.input}")
     print(f"Base size: {args.size}, steps beyond: {steps_beyond}")
 
+    # Per-piece step counts (from TypeScript blending) or None (use global)
+    per_piece_steps = json.loads(args.piece_steps) if args.piece_steps else None
+
     # Compute target coordinates
-    targets = compute_target_from_rules(grade_data, steps_beyond)
-    print(f"Computed targets for {len(targets)} pieces")
+    targets = compute_target_from_rules(grade_data, steps_beyond, per_piece_steps)
+    print(f"Computed targets for {len(targets)} pieces" +
+          (f" (per-piece steps: {[round(s,1) for s in per_piece_steps[:5]]}{'...' if len(per_piece_steps)>5 else ''})" if per_piece_steps else ""))
 
     # Open PDF
     pdf = pikepdf.open(args.input)

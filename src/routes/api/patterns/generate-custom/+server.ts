@@ -84,8 +84,9 @@ async function generateGradedFiles(
 				await fsWrite(rulesPath, rulesJson);
 
 				const scriptPath = join(process.cwd(), 'scripts', 'grade-pattern-pdf.py');
-				const cmd = `python3 "${scriptPath}" "${inputPath}" --rules "${rulesPath}" --steps ${stepResult.steps_beyond} --size "${stepResult.largest_size}" -o "${outputPath}"`;
-				console.log(`[grade-rules] Running: ${fmt.format} steps=${stepResult.steps_beyond}`);
+				const pieceStepsJson = JSON.stringify(gradeTarget.pieces.map(p => p.piece_steps));
+				const cmd = `python3 "${scriptPath}" "${inputPath}" --rules "${rulesPath}" --steps ${stepResult.steps_beyond} --size "${stepResult.largest_size}" --piece-steps '${pieceStepsJson}' -o "${outputPath}"`;
+				console.log(`[grade-rules] Running: ${fmt.format} steps=${stepResult.steps_beyond} (per-piece blended)`);
 				const { stdout, stderr } = await execAsync(cmd, { timeout: 60000 });
 				if (stdout) console.log(`[grade-rules] ${fmt.format}: ${stdout.trim()}`);
 				if (stderr) console.error(`[grade-rules] ${fmt.format} stderr: ${stderr.trim()}`);
@@ -196,16 +197,20 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					});
 				}
 
-				// Grade rules available — pass through to generation with grade rule metadata
-				const gradeTarget = computeTargetCoords(gradeRulesRow.grade_data, stepResult.steps_beyond);
+				// Grade rules available — compute per-piece blended targets
+				const gradeTarget = computeTargetCoords(gradeRulesRow.grade_data, stepResult);
 
-				// Return grading info with grade rules metadata (no error = frontend shows files)
+				// Return grading info with per-measurement data (no error = frontend shows files)
 				if (!generate) {
 					return json({
 						grading,
 						grading_method: 'grade_rules',
 						steps_beyond: stepResult.steps_beyond,
-						largest_size: stepResult.largest_size
+						bust_steps: stepResult.bust_steps,
+						waist_steps: stepResult.waist_steps,
+						hip_steps: stepResult.hip_steps,
+						largest_size: stepResult.largest_size,
+						piece_steps: gradeTarget.pieces.map(p => ({ i: p.index, s: p.piece_steps, sw: +(p.scale_w.toFixed(4)), sh: +(p.scale_h.toFixed(4)) }))
 					});
 				}
 

@@ -4,8 +4,13 @@
  * computes fractional grade steps from customer measurements,
  * and generates target coordinates for any custom size.
  *
+ * KEY FEATURE: Per-piece blended steps.
+ * When a customer has disproportionate measurements (e.g., large bust, normal hips),
+ * each piece gets its OWN extrapolation amount based on how much it grows per step.
+ * Bodice pieces (high growth) lean toward bust_steps. Skirt pieces (low growth) lean
+ * toward hip_steps. This means only the body parts that need adjustment get adjusted.
+ *
  * This is a NEW module — does not modify any existing grading code.
- * The existing uniform-scaling system (pattern-grading.server.ts) is untouched.
  */
 
 import { query } from '$lib/db.server';
@@ -42,8 +47,12 @@ export interface GradeRulesRow {
 }
 
 export interface GradeTarget {
-	/** How many grade steps beyond the largest standard size (can be fractional) */
+	/** Max grade steps beyond the largest standard size */
 	steps_beyond: number;
+	/** Per-measurement steps */
+	bust_steps: number;
+	waist_steps: number;
+	hip_steps: number;
 	/** The largest standard size (starting point for extrapolation) */
 	largest_size: string;
 	/** Target coordinates per piece in PDF points */
@@ -52,14 +61,13 @@ export interface GradeTarget {
 
 export interface GradeTargetPiece {
 	index: number;
+	/** This piece's blended step count (based on its growth rate) */
+	piece_steps: number;
 	anchor: [number, number];
 	coords: [number, number][];
 	ops: string[];
-	/** Bounding box of target coordinates */
 	bbox: { minX: number; minY: number; maxX: number; maxY: number };
-	/** Bounding box of base (largest standard) coordinates */
 	base_bbox: { minX: number; minY: number; maxX: number; maxY: number };
-	/** Per-piece scale factors (target / largest) for DXF scaling */
 	scale_w: number;
 	scale_h: number;
 }
@@ -83,7 +91,7 @@ export async function loadGradeRules(patternSlug: string): Promise<GradeRulesRow
 	return rows.length > 0 ? rows[0] : null;
 }
 
-// ─── Compute how many grade steps the customer needs ───
+// ─── Compute per-measurement grade steps ───
 
 export interface CustomerMeasurements {
 	bust_cm: number;
@@ -91,16 +99,24 @@ export interface CustomerMeasurements {
 	hip_cm: number;
 }
 
+export interface GradeStepsResult {
+	steps_beyond: number;      // max of all three (for cap checking)
+	bust_steps: number;        // how many steps bust needs (can be 0 or negative)
+	waist_steps: number;
+	hip_steps: number;
+	largest_size: string;
+	within_range: boolean;
+}
+
 /**
- * Compute the fractional number of grade steps beyond the largest standard size.
- * Uses the finished garment measurement chart to determine position on the size scale.
+ * Compute per-measurement grade steps beyond the largest standard size.
+ * Returns separate step counts for bust, waist, and hip.
  */
 export async function computeGradeSteps(
 	patternSlug: string,
 	measurements: CustomerMeasurements,
 	gradeRules: GradeRulesRow
-): Promise<{ steps_beyond: number; largest_size: string; within_range: boolean } | null> {
-	// Get finished measurements for the largest standard size
+): Promise<GradeStepsResult | null> {
 	const sizes = gradeRules.sizes;
 	const largestSize = sizes[sizes.length - 1];
 	const secondLargest = sizes.length >= 2 ? sizes[sizes.length - 2] : null;
@@ -118,7 +134,6 @@ export async function computeGradeSteps(
 
 	if (finishedRows.length === 0) return null;
 
-	// Customer's ideal finished measurements
 	const custFinBust = measurements.bust_cm + STANDARD_EASE.bust;
 	const custFinWaist = measurements.waist_cm + STANDARD_EASE.waist;
 	const custFinHip = measurements.hip_cm + STANDARD_EASE.hip;
@@ -136,10 +151,11 @@ export async function computeGradeSteps(
 	if (largestBust && custFinBust <= largestBust &&
 		(!largestWaist || custFinWaist <= largestWaist) &&
 		(!largestHip || custFinHip <= largestHip)) {
-		return { steps_beyond: 0, largest_size: largestSize, within_range: true };
+		return { steps_beyond: 0, bust_steps: 0, waist_steps: 0, hip_steps: 0,
+			largest_size: largestSize, within_range: true };
 	}
 
-	// Compute the measurement delta per size step (between last two sizes)
+	// Compute measurement delta per size step (between last two standard sizes)
 	let bustStep = 0, waistStep = 0, hipStep = 0;
 	if (second) {
 		const secondBust = second.bust_cm ? Number(second.bust_cm) : null;
@@ -150,32 +166,29 @@ export async function computeGradeSteps(
 		if (largestHip && secondHip) hipStep = largestHip - secondHip;
 	}
 
-	// How many steps beyond the largest size?
-	// Use the measurement that requires the most steps (worst case)
-	let maxSteps = 0;
-	if (bustStep > 0 && largestBust) {
-		const bustBeyond = (custFinBust - largestBust) / bustStep;
-		maxSteps = Math.max(maxSteps, bustBeyond);
-	}
-	if (waistStep > 0 && largestWaist) {
-		const waistBeyond = (custFinWaist - largestWaist) / waistStep;
-		maxSteps = Math.max(maxSteps, waistBeyond);
-	}
-	if (hipStep > 0 && largestHip) {
-		const hipBeyond = (custFinHip - largestHip) / hipStep;
-		maxSteps = Math.max(maxSteps, hipBeyond);
-	}
+	// Per-measurement steps (can be 0 or negative if customer is smaller)
+	const bustBeyond = bustStep > 0 && largestBust
+		? Math.max(0, (custFinBust - largestBust) / bustStep) : 0;
+	const waistBeyond = waistStep > 0 && largestWaist
+		? Math.max(0, (custFinWaist - largestWaist) / waistStep) : 0;
+	const hipBeyond = hipStep > 0 && largestHip
+		? Math.max(0, (custFinHip - largestHip) / hipStep) : 0;
+
+	const maxSteps = Math.max(bustBeyond, waistBeyond, hipBeyond);
 
 	return {
 		steps_beyond: Math.round(maxSteps * 100) / 100,
+		bust_steps: Math.round(bustBeyond * 100) / 100,
+		waist_steps: Math.round(waistBeyond * 100) / 100,
+		hip_steps: Math.round(hipBeyond * 100) / 100,
 		largest_size: largestSize,
 		within_range: false
 	};
 }
 
-// ─── Compute target coordinates ───
+// ─── Compute target coordinates with per-piece blending ───
 
-function bbox(coords: [number, number][]): { minX: number; minY: number; maxX: number; maxY: number } {
+function bboxOf(coords: [number, number][]): { minX: number; minY: number; maxX: number; maxY: number } {
 	const xs = coords.map(c => c[0]);
 	const ys = coords.map(c => c[1]);
 	return {
@@ -185,23 +198,73 @@ function bbox(coords: [number, number][]): { minX: number; minY: number; maxX: n
 }
 
 /**
- * Compute target piece coordinates for a custom size by extrapolating grade rules.
+ * Compute target piece coordinates with per-piece blended grade steps.
  *
- * For each piece, reconstructs the largest standard size's coordinates from base + deltas,
- * then extrapolates by `steps_beyond` using the average of the last 2-3 grade deltas.
+ * Each piece gets its own step count based on its "growth rate" — how much
+ * it grows per standard grade step relative to other pieces.
+ *
+ * High-growth pieces (bodice) → lean toward the largest measurement step (e.g., bust)
+ * Low-growth pieces (skirt) → lean toward the smallest measurement step (e.g., hip)
+ *
+ * This means: bust=130 + hip=100 → bodice expands a lot, skirt barely changes.
  */
 export function computeTargetCoords(
 	gradeRules: GradeRules,
-	stepsBeyond: number
+	stepResult: GradeStepsResult
 ): GradeTarget {
 	const sizes = gradeRules.sizes;
 	const largestSize = sizes[sizes.length - 1];
-	const numSteps = sizes.length - 1; // number of size-to-size transitions
+	const numSteps = sizes.length - 1;
+	const avgWindow = Math.min(3, numSteps);
+	const startStep = numSteps - avgWindow;
 
+	const { bust_steps, waist_steps, hip_steps } = stepResult;
+	const minSteps = Math.min(bust_steps, waist_steps, hip_steps);
+	const maxSteps = Math.max(bust_steps, waist_steps, hip_steps);
+
+	// First pass: compute each piece's average width growth per step
+	const pieceGrowthRates: number[] = [];
+	for (const piece of gradeRules.pieces) {
+		// Compute how much this piece's bbox WIDTH changes per step (last few steps)
+		let totalWidthGrowth = 0;
+		if (piece.consistent && piece.coord_deltas.every(d => d !== null)) {
+			for (let s = startStep; s < numSteps; s++) {
+				const deltas = piece.coord_deltas[s]!;
+				// Width growth = range of x-deltas (max dx - min dx gives expansion)
+				const dxs = deltas.map(d => d[0]);
+				const maxDx = Math.max(...dxs);
+				const minDx = Math.min(...dxs);
+				totalWidthGrowth += (maxDx - minDx);
+			}
+		} else {
+			// For inconsistent pieces, use anchor x-delta as proxy
+			for (let s = startStep; s < numSteps; s++) {
+				totalWidthGrowth += Math.abs(piece.anchor_deltas[s][0]);
+			}
+		}
+		pieceGrowthRates.push(totalWidthGrowth / avgWindow);
+	}
+
+	// Normalize growth rates to [0, 1] range
+	const minRate = Math.min(...pieceGrowthRates);
+	const maxRate = Math.max(...pieceGrowthRates);
+	const rateRange = maxRate - minRate;
+
+	// Second pass: compute target coords with per-piece blended steps
 	const targetPieces: GradeTargetPiece[] = [];
 
-	for (const piece of gradeRules.pieces) {
-		// Step 1: Reconstruct the largest size's coordinates from base + all deltas
+	for (let pi = 0; pi < gradeRules.pieces.length; pi++) {
+		const piece = gradeRules.pieces[pi];
+
+		// Blend factor: 0 = low growth (use minSteps), 1 = high growth (use maxSteps)
+		const t = rateRange > 0.01
+			? (pieceGrowthRates[pi] - minRate) / rateRange
+			: 0.5; // if all pieces grow the same, use middle
+
+		// This piece's blended step count
+		const pieceSteps = minSteps + t * (maxSteps - minSteps);
+
+		// Reconstruct the largest size's coordinates
 		let largestAnchor: [number, number] = [...piece.base_anchor];
 		for (let s = 0; s < numSteps; s++) {
 			largestAnchor[0] += piece.anchor_deltas[s][0];
@@ -209,9 +272,7 @@ export function computeTargetCoords(
 		}
 
 		let largestCoords: [number, number][];
-
 		if (piece.consistent && piece.coord_deltas.every(d => d !== null)) {
-			// Reconstruct from base + accumulated deltas
 			largestCoords = piece.base_coords.map(c => [...c] as [number, number]);
 			for (let s = 0; s < numSteps; s++) {
 				const deltas = piece.coord_deltas[s]!;
@@ -221,19 +282,14 @@ export function computeTargetCoords(
 				}
 			}
 		} else if (piece.per_size_coords && piece.per_size_coords[largestSize]) {
-			// Use stored snapshot for the largest size
 			largestCoords = piece.per_size_coords[largestSize].map(c => [...c] as [number, number]);
 		} else {
-			// Fallback: use base coords (no extrapolation possible)
 			largestCoords = piece.base_coords.map(c => [...c] as [number, number]);
 		}
 
-		const largestBbox = bbox(largestCoords);
+		const largestBbox = bboxOf(largestCoords);
 
-		// Step 2: Compute average delta per step (from last 2-3 steps for smoothing)
-		const avgWindow = Math.min(3, numSteps);
-		const startStep = numSteps - avgWindow;
-
+		// Compute average delta per step (last 2-3 steps)
 		let avgAnchorDelta: [number, number] = [0, 0];
 		for (let s = startStep; s < numSteps; s++) {
 			avgAnchorDelta[0] += piece.anchor_deltas[s][0];
@@ -258,23 +314,21 @@ export function computeTargetCoords(
 			}
 		}
 
-		// Step 3: Extrapolate
+		// Extrapolate using THIS PIECE'S blended step count
 		const targetAnchor: [number, number] = [
-			largestAnchor[0] + avgAnchorDelta[0] * stepsBeyond,
-			largestAnchor[1] + avgAnchorDelta[1] * stepsBeyond
+			largestAnchor[0] + avgAnchorDelta[0] * pieceSteps,
+			largestAnchor[1] + avgAnchorDelta[1] * pieceSteps
 		];
 
 		let targetCoords: [number, number][];
 		if (avgCoordDeltas) {
 			targetCoords = largestCoords.map((c, k) => [
-				c[0] + avgCoordDeltas![k][0] * stepsBeyond,
-				c[1] + avgCoordDeltas![k][1] * stepsBeyond
+				c[0] + avgCoordDeltas![k][0] * pieceSteps,
+				c[1] + avgCoordDeltas![k][1] * pieceSteps
 			]);
 		} else {
-			// For inconsistent pieces: uniform scale based on anchor delta growth
-			// (best we can do without per-vertex data)
 			const scaleFromAnchor = largestBbox.maxX - largestBbox.minX > 0
-				? 1 + (Math.abs(avgAnchorDelta[0]) * stepsBeyond) / (largestBbox.maxX - largestBbox.minX)
+				? 1 + (Math.abs(avgAnchorDelta[0]) * pieceSteps) / (largestBbox.maxX - largestBbox.minX)
 				: 1;
 			const cx = (largestBbox.minX + largestBbox.maxX) / 2;
 			const cy = (largestBbox.minY + largestBbox.maxY) / 2;
@@ -284,9 +338,7 @@ export function computeTargetCoords(
 			]);
 		}
 
-		const targetBbox = bbox(targetCoords);
-
-		// Per-piece scale factors (for DXF scaling)
+		const targetBbox = bboxOf(targetCoords);
 		const lw = largestBbox.maxX - largestBbox.minX;
 		const lh = largestBbox.maxY - largestBbox.minY;
 		const tw = targetBbox.maxX - targetBbox.minX;
@@ -294,6 +346,7 @@ export function computeTargetCoords(
 
 		targetPieces.push({
 			index: piece.index,
+			piece_steps: Math.round(pieceSteps * 100) / 100,
 			anchor: targetAnchor,
 			coords: targetCoords,
 			ops: piece.base_ops,
@@ -305,7 +358,10 @@ export function computeTargetCoords(
 	}
 
 	return {
-		steps_beyond: stepsBeyond,
+		steps_beyond: stepResult.steps_beyond,
+		bust_steps,
+		waist_steps,
+		hip_steps,
 		largest_size: largestSize,
 		pieces: targetPieces
 	};
