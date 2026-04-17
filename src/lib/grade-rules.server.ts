@@ -253,9 +253,43 @@ export function computeTargetCoords(
 		pieceGrowthRates.push(Math.max(0, widthGrowth));
 	}
 
+	// Group pieces by anchor proximity — pieces with nearby anchors are
+	// cutting line + seam allowance of the SAME garment piece and MUST get
+	// the same scale to stay aligned. Threshold: 100pt (~35mm).
+	const PAIR_THRESHOLD = 100;
+	const pieceGroups: number[][] = []; // [[0,1], [2,3], [4,5], ...]
+	const assigned = new Set<number>();
+
+	for (let i = 0; i < gradeRules.pieces.length; i++) {
+		if (assigned.has(i)) continue;
+		const group = [i];
+		assigned.add(i);
+		const ai = gradeRules.pieces[i].base_anchor;
+		for (let j = i + 1; j < gradeRules.pieces.length; j++) {
+			if (assigned.has(j)) continue;
+			const aj = gradeRules.pieces[j].base_anchor;
+			const dist = Math.sqrt((ai[0] - aj[0]) ** 2 + (ai[1] - aj[1]) ** 2);
+			if (dist < PAIR_THRESHOLD) {
+				group.push(j);
+				assigned.add(j);
+			}
+		}
+		pieceGroups.push(group);
+	}
+
+	// For each group, use the MAX growth rate (so the pair scales together based on the larger piece)
+	const groupGrowthRate: Map<number, number> = new Map();
+	for (const group of pieceGroups) {
+		const maxGroupRate = Math.max(...group.map(i => pieceGrowthRates[i]));
+		for (const i of group) {
+			groupGrowthRate.set(i, maxGroupRate);
+		}
+	}
+
 	// Normalize growth rates to [0, 1] range
-	const minRate = Math.min(...pieceGrowthRates);
-	const maxRate = Math.max(...pieceGrowthRates);
+	const allGroupRates = [...groupGrowthRate.values()];
+	const minRate = Math.min(...allGroupRates);
+	const maxRate = Math.max(...allGroupRates);
 	const rateRange = maxRate - minRate;
 
 	// Second pass: compute target coords with per-piece blended steps
@@ -265,8 +299,10 @@ export function computeTargetCoords(
 		const piece = gradeRules.pieces[pi];
 
 		// Blend factor: 0 = low growth (use minSteps), 1 = high growth (use maxSteps)
+		// Uses grouped rate so cutting line + seam allowance get identical scales
+		const groupedRate = groupGrowthRate.get(pi) ?? pieceGrowthRates[pi];
 		const t = rateRange > 0.01
-			? (pieceGrowthRates[pi] - minRate) / rateRange
+			? (groupedRate - minRate) / rateRange
 			: 0.5; // if all pieces grow the same, use middle
 
 		// This piece's blended step count
