@@ -174,37 +174,98 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	// Cap scaling at 4% — validated by pattern expert as max for clean output
 	// (no piece overlap, seam allowances stay accurate, no edge clipping)
-	// Cap scaling at 4% — validated by pattern expert as max for clean output
-	// (no piece overlap, seam allowances stay accurate, no edge clipping)
+	// Check if adjustment exceeds 4% uniform scaling cap
 	const scalePct = Math.abs(grading.pdf_scale_width - 1);
 	if (scalePct > 0.04) {
-		// Check if grade rules exist — show info but DON'T generate yet
-		// (grade-pattern-pdf.py needs further debugging before production use)
+		// Check if grade rules exist — use per-piece scaling via proven pipeline
 		const gradeRulesRow = await loadGradeRules(pattern_slug);
-		const hasGradeRules = !!gradeRulesRow;
-		let gradeInfo: Record<string, unknown> = {};
 		if (gradeRulesRow) {
 			const stepResult = await computeGradeSteps(
 				pattern_slug,
 				{ bust_cm: bust, waist_cm: waist, hip_cm: hip },
 				gradeRulesRow
 			);
-			if (stepResult) {
-				gradeInfo = {
-					grading_method: 'grade_rules_available',
-					steps_beyond: stepResult.steps_beyond,
-					bust_steps: stepResult.bust_steps,
-					waist_steps: stepResult.waist_steps,
-					hip_steps: stepResult.hip_steps,
-					largest_size: stepResult.largest_size
-				};
+
+			if (stepResult && stepResult.steps_beyond > 0) {
+				// Compute per-piece scale factors from grade rules
+				const gradeTarget = computeTargetCoords(gradeRulesRow.grade_data, stepResult);
+				const pieceScales: [number, number][] = gradeTarget.pieces.map(p => [
+					Math.round(p.scale_w * 10000) / 10000,
+					Math.round(p.scale_h * 10000) / 10000
+				]);
+
+				// Preview — return grading info (no error = frontend shows downloads)
+				if (!generate) {
+					return json({
+						grading,
+						grading_method: 'grade_rules',
+						steps_beyond: stepResult.steps_beyond,
+						bust_steps: stepResult.bust_steps,
+						waist_steps: stepResult.waist_steps,
+						hip_steps: stepResult.hip_steps,
+						largest_size: stepResult.largest_size,
+						piece_steps: gradeTarget.pieces.map(p => ({ i: p.index, s: p.piece_steps, sw: +(p.scale_w.toFixed(4)), sh: +(p.scale_h.toFixed(4)) })),
+						high_extrapolation: stepResult.steps_beyond > 5
+					});
+				}
+
+				// Generate files — use proven extract-single-size.py with per-piece scales
+				const patterns = await query<{ pattern_name: string }>(
+					'SELECT pattern_name FROM cs_pattern_catalog WHERE pattern_slug = $1',
+					[pattern_slug]
+				);
+				const patternName = patterns[0]?.pattern_name || pattern_slug;
+				const customLabel = `GRADED (bust ${bust}, waist ${waist}, hip ${hip})`;
+
+				console.log(`[grade-rules] Generating for ${pattern_slug}: ${pieceScales.length} per-piece scales via proven pipeline`);
+
+				try {
+					const files = await generateCustomPatternFiles(
+						pattern_slug,
+						patternName,
+						{ width: grading.scale_width, height: grading.scale_height },
+						{ width: grading.pdf_scale_width, height: grading.pdf_scale_height },
+						customLabel,
+						grading.target_size,
+						pieceScales  // ← per-piece scales passed to extract-single-size.py
+					);
+
+					if (files.length === 0) {
+						throw error(500, 'No pattern files could be generated');
+					}
+
+					if (format) {
+						const file = files.find(f => f.format === format);
+						if (!file) throw error(404, `Format ${format} not available`);
+						return new Response(file.data.buffer as ArrayBuffer, {
+							headers: {
+								'Content-Type': file.mimeType,
+								'Content-Disposition': `attachment; filename="${file.filename}"`,
+								'Content-Length': file.data.length.toString()
+							}
+						});
+					}
+
+					return json({
+						grading,
+						grading_method: 'grade_rules',
+						steps_beyond: stepResult.steps_beyond,
+						files: files.map(f => ({
+							format: f.format, label: f.label, filename: f.filename, size: f.data.length
+						}))
+					});
+				} catch (e: any) {
+					console.error('[grade-rules] Generation failed:', e);
+					if (e?.status) throw e;
+					throw error(500, `Generation failed: ${e?.message || 'unknown error'}`);
+				}
 			}
 		}
 
+		// No grade rules — return existing "too large" error
 		return json({
 			grading,
 			scale_pct: +(scalePct * 100).toFixed(1),
-			...gradeInfo,
 			error: `Your measurements are ${(scalePct * 100).toFixed(0)}% beyond the nearest size (${grading.target_size}). Custom-fit patterns work best within 4% adjustment. For larger differences, we recommend downloading the nearest standard size and making manual alterations.`
 		});
 	}

@@ -194,7 +194,8 @@ async function extractSingleSizePdf(
 	slug: string,
 	size: string,
 	format: string,
-	scale?: ScaleFactors
+	scale?: ScaleFactors,
+	pieceScales?: [number, number][]
 ): Promise<Uint8Array | null> {
 	const admin = getAdmin();
 
@@ -236,8 +237,9 @@ async function extractSingleSizePdf(
 			await fsWrite(inputPath, Buffer.from(await original.arrayBuffer()));
 			const scriptPath = join(process.cwd(), 'scripts', 'extract-single-size.py');
 			const scaleArgs = scale ? ` --scale-w ${scale.width} --scale-h ${scale.height}` : '';
-			console.log(`[extract] Running: size=${size} format=${format}${scaleArgs}`);
-			await execAsync(`python3 "${scriptPath}" "${inputPath}" "${size}" "${outputPath}"${scaleArgs}`, { timeout: 30000 });
+			const pieceScaleArgs = pieceScales ? ` --piece-scales '${JSON.stringify(pieceScales)}'` : '';
+			console.log(`[extract] Running: size=${size} format=${format}${scaleArgs}${pieceScales ? ` (${pieceScales.length} per-piece scales)` : ''}`);
+			await execAsync(`python3 "${scriptPath}" "${inputPath}" "${size}" "${outputPath}"${scaleArgs}${pieceScaleArgs}`, { timeout: 30000 });
 			const outputBuffer = await fsRead(outputPath);
 
 			// Cache only unscaled single-size exports
@@ -271,7 +273,8 @@ export async function generateCustomPatternFiles(
 	dxfScale: ScaleFactors,
 	pdfScale: ScaleFactors,
 	customLabel: string,
-	baseSize?: string
+	baseSize?: string,
+	pieceScales?: [number, number][]
 ): Promise<PatternFile[]> {
 	const available = await listPatternFiles(patternSlug);
 	if (available.length === 0) {
@@ -306,8 +309,8 @@ export async function generateCustomPatternFiles(
 				let pdfBytes: Uint8Array | null = null;
 
 				if (baseSize) {
-					console.log(`[custom-fit] Extracting+scaling ${baseSize} for ${patternSlug}/${file.format} (W=${pdfScale.width} H=${pdfScale.height})`);
-					pdfBytes = await extractSingleSizePdf(patternSlug, baseSize, file.format, pdfScale);
+					console.log(`[custom-fit] Extracting+scaling ${baseSize} for ${patternSlug}/${file.format} (W=${pdfScale.width} H=${pdfScale.height})${pieceScales ? ` [${pieceScales.length} per-piece scales]` : ''}`);
+					pdfBytes = await extractSingleSizePdf(patternSlug, baseSize, file.format, pdfScale, pieceScales);
 					if (pdfBytes) {
 						console.log(`[custom-fit] Extract+scale OK (${pdfBytes.length} bytes)`);
 					} else {

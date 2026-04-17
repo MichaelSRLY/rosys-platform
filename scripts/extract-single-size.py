@@ -20,7 +20,7 @@ import pikepdf
 ALL_SIZES = ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL']
 
 
-def extract_single_size(input_path, target_size, output_path, scale_w=None, scale_h=None):
+def extract_single_size(input_path, target_size, output_path, scale_w=None, scale_h=None, piece_scales=None):
     pdf = pikepdf.open(input_path)
 
     oc_props = pdf.Root.get('/OCProperties')
@@ -210,13 +210,18 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
                     if m:
                         x = float(m.group(1))
                         y = float(m.group(2))
+                        # Per-piece scale factors (from grade rules) or uniform fallback
+                        if piece_scales and piece_seq < len(piece_scales):
+                            psw, psh = piece_scales[piece_seq]
+                        else:
+                            psw, psh = scale_w, scale_h
                         if piece_seq < len(piece_centers):
                             cx, cy = piece_centers[piece_seq]
-                            nx = x - cx * (scale_w - 1)
-                            ny = y - cy * (scale_h - 1)
-                            output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} {nx:.4f} {ny:.4f} cm')
+                            nx = x - cx * (psw - 1)
+                            ny = y - cy * (psh - 1)
+                            output.append(f'q {psw:.6f} 0 0 {psh:.6f} {nx:.4f} {ny:.4f} cm')
                         else:
-                            output.append(f'q {scale_w:.6f} 0 0 {scale_h:.6f} {x} {y} cm')
+                            output.append(f'q {psw:.6f} 0 0 {psh:.6f} {x} {y} cm')
                         piece_seq += 1
                         scaled_count += 1
                         continue
@@ -239,6 +244,7 @@ def main():
     parser.add_argument('output', nargs='?', help='Output PDF path')
     parser.add_argument('--scale-w', type=float, default=None, help='Width scale factor for custom-fit')
     parser.add_argument('--scale-h', type=float, default=None, help='Height scale factor for custom-fit')
+    parser.add_argument('--piece-scales', default=None, help='JSON array of [sw,sh] per piece (from grade rules)')
     args = parser.parse_args()
 
     size = args.size.upper()
@@ -249,10 +255,17 @@ def main():
 
     output = args.output or args.input.replace('.pdf', f'_{size}.pdf')
 
+    # Parse per-piece scale factors if provided
+    piece_scales = None
+    if args.piece_scales:
+        import json
+        piece_scales = [tuple(p) for p in json.loads(args.piece_scales)]
+        print(f"Per-piece grading: {len(piece_scales)} pieces with individual scales")
+
     print(f"Extracting size {size} from {args.input}")
     if args.scale_w and args.scale_h:
         print(f"Custom-fit scaling: W*{args.scale_w:.4f} H*{args.scale_h:.4f}")
-    on, off = extract_single_size(args.input, size, output, args.scale_w, args.scale_h)
+    on, off = extract_single_size(args.input, size, output, args.scale_w, args.scale_h, piece_scales)
     print(f"Done: {on} layers ON, {off} layers OFF")
     print(f"Output: {output}")
 
