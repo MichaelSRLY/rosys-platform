@@ -175,7 +175,7 @@
 			let res = await fetch('/api/patterns/generate-custom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pattern_slug: pattern.pattern_slug, bust: parseFloat(bust), waist: parseFloat(waist), hip: parseFloat(hip) }) });
 			if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Failed');
 			const json = await res.json();
-			customFitGrading = { ...json.grading, scale_pct: json.scale_pct }; customFitError = json.error || '';
+			customFitGrading = { ...json.grading, scale_pct: json.scale_pct, grading_method: json.grading_method, steps_beyond: json.steps_beyond }; customFitError = json.error || '';
 
 			// Then generate all formats to get file list
 			if (!customFitError) {
@@ -743,6 +743,12 @@
 									</div>
 								{:else if customFitError}<div class="err-box mb-3">{customFitError}</div>
 								{:else}
+									{#if customFitGrading?.grading_method === 'grade_rules'}
+										<div class="info-box mb-3" style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 10px; padding: 12px 14px; font-size: 13px; color: #065f46; line-height: 1.5;">
+											<strong>Custom graded pattern</strong><br>
+											Your pattern has been precisely graded using per-piece rules — each piece is individually shaped for your measurements, not just scaled. This gives you accurate seam allowances and proper proportions.
+										</div>
+									{/if}
 									<span class="card-label mb-2 block">Download custom-fit pattern</span>
 									<div class="dl-grid">
 										{#each [
