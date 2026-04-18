@@ -198,10 +198,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					});
 				}
 
-				// Compute per-vertex grade target (used by grade-pattern-pdf.py via generateGradedFiles)
+				// Compute per-piece scale factors from grade rules
+				// Cap each piece at the uniform scale — per-piece can reduce but never exceed uniform
 				const gradeTarget = computeTargetCoords(gradeRulesRow.grade_data, stepResult);
 				const maxSw = grading.pdf_scale_width;
 				const maxSh = grading.pdf_scale_height;
+				const pieceScales: [number, number][] = gradeTarget.pieces.map(p => [
+					Math.round(Math.min(p.scale_w, maxSw) * 10000) / 10000,
+					Math.round(Math.min(p.scale_h, maxSh) * 10000) / 10000
+				]);
 
 				// Preview — return grading info (no error = frontend shows downloads)
 				if (!generate) {
@@ -218,23 +223,53 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					});
 				}
 
-				// Generate files via per-vertex grading (grade-pattern-pdf.py) —
-				// preserves 1cm seam allowance uniformity because each SA vertex has
-				// its own grade-rule delta instead of being stretched by a piece scale.
-				console.log(`[grade-rules] Generating for ${pattern_slug}: per-vertex grading across ${gradeTarget.pieces.length} pieces`);
+				// Generate files — use proven extract-single-size.py with per-piece scales
+				const patterns = await query<{ pattern_name: string }>(
+					'SELECT pattern_name FROM cs_pattern_catalog WHERE pattern_slug = $1',
+					[pattern_slug]
+				);
+				const patternName = patterns[0]?.pattern_name || pattern_slug;
+				const customLabel = `GRADED (bust ${bust}, waist ${waist}, hip ${hip})`;
+
+				console.log(`[grade-rules] Generating for ${pattern_slug}: ${pieceScales.length} per-piece scales via proven pipeline`);
 
 				try {
-					return await generateGradedFiles(
+					const files = await generateCustomPatternFiles(
 						pattern_slug,
-						grading,
-						gradeRulesRow,
-						gradeTarget,
-						stepResult,
-						bust, waist, hip,
-						format
+						patternName,
+						{ width: grading.scale_width, height: grading.scale_height },
+						{ width: grading.pdf_scale_width, height: grading.pdf_scale_height },
+						customLabel,
+						grading.target_size,
+						pieceScales  // ← per-piece scales passed to extract-single-size.py
 					);
+
+					if (files.length === 0) {
+						throw error(500, 'No pattern files could be generated');
+					}
+
+					if (format) {
+						const file = files.find(f => f.format === format);
+						if (!file) throw error(404, `Format ${format} not available`);
+						return new Response(file.data.buffer as ArrayBuffer, {
+							headers: {
+								'Content-Type': file.mimeType,
+								'Content-Disposition': `attachment; filename="${file.filename}"`,
+								'Content-Length': file.data.length.toString()
+							}
+						});
+					}
+
+					return json({
+						grading,
+						grading_method: 'grade_rules',
+						steps_beyond: stepResult.steps_beyond,
+						files: files.map(f => ({
+							format: f.format, label: f.label, filename: f.filename, size: f.data.length
+						}))
+					});
 				} catch (e: any) {
-					console.error('[grade-rules] Per-vertex generation failed:', e);
+					console.error('[grade-rules] Generation failed:', e);
 					if (e?.status) throw e;
 					throw error(500, `Generation failed: ${e?.message || 'unknown error'}`);
 				}
