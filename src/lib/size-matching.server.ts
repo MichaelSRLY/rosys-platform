@@ -58,17 +58,18 @@ const SIZE_ORDER: Record<string, number> = {
 	XXS: 0, XS: 1, S: 2, M: 3, L: 4, XL: 5, '2XL': 6, '3XL': 7, '4XL': 8, '5XL': 9
 };
 
-function fitCategory(diff: number): MeasurementFit['fit'] {
-	if (diff < -2) return 'tight';
-	if (diff <= 2) return 'exact';
-	if (diff <= 6) return 'comfortable';
-	return 'loose';
+function fitCategory(diff: number, easeStd: number): MeasurementFit['fit'] {
+	// diff = chart_cm - body_cm. Classify relative to standard ease.
+	if (diff < 0) return 'tight';                       // garment smaller than body
+	if (diff < easeStd - 2) return 'exact';             // less ease than standard
+	if (diff <= easeStd + 3) return 'comfortable';      // around standard ease
+	return 'loose';                                      // more ease than standard
 }
 
-function makeFit(label: string, userVal: number, chartVal: number | null): MeasurementFit | null {
+function makeFit(label: string, bodyVal: number, chartVal: number | null, easeStd: number): MeasurementFit | null {
 	if (chartVal === null) return null;
-	const diff = chartVal - userVal;
-	return { label, user_cm: userVal, chart_cm: chartVal, diff_cm: diff, fit: fitCategory(diff) };
+	const diff = chartVal - bodyVal;
+	return { label, user_cm: bodyVal, chart_cm: chartVal, diff_cm: diff, fit: fitCategory(diff, easeStd) };
 }
 
 export async function getPatternSizeChart(patternSlug: string): Promise<PatternSizeChart | null> {
@@ -105,13 +106,9 @@ export function matchSize(
 ): SizeRecommendation {
 	const matches: SizeMatch[] = [];
 
-	// Always match against finished garment measurements.
-	// Customer body + standard ease should ≈ finished garment measurement.
-	// Penalize sizes where finished < body (garment too small to wear).
-	const EASE = { bust: 5, waist: 4, hip: 4 }; // standard ease constants
-	const customerFinBust = bust + EASE.bust;
-	const customerFinWaist = waist + EASE.waist;
-	const customerFinHip = hip + EASE.hip;
+	// Match against finished garment measurements, compared to the user's BODY
+	// measurements directly. Ease is used to classify fit, not to inflate user_cm.
+	const EASE = { bust: 5, waist: 4, hip: 4 }; // standard ease (bust +5, waist +4, hip +4)
 
 	const matchRows = chart.finished.length > 0 ? chart.finished : chart.body;
 
@@ -121,10 +118,11 @@ export function matchSize(
 		const rowWaist = row.waist_cm ? Number(row.waist_cm) : null;
 		const rowHip = row.hip_cm ? Number(row.hip_cm) : null;
 
-		// Compare customer's ideal finished vs actual finished garment
-		const bustFit = makeFit('Bust', customerFinBust, rowBust);
-		const waistFit = makeFit('Waist', customerFinWaist, rowWaist);
-		const hipFit = makeFit('Hip', customerFinHip, rowHip);
+		// Show user's BODY vs finished garment directly — more intuitive for customers.
+		// Standard ease is used to classify the fit category but not shown in user_cm.
+		const bustFit = makeFit('Bust', bust, rowBust, EASE.bust);
+		const waistFit = makeFit('Waist', waist, rowWaist, EASE.waist);
+		const hipFit = makeFit('Hip', hip, rowHip, EASE.hip);
 
 		const bustRaw = bustFit ? bustFit.diff_cm : 0;
 		const waistRaw = waistFit ? waistFit.diff_cm : 0;
