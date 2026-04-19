@@ -187,16 +187,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			);
 
 			if (stepResult && stepResult.steps_beyond > 0) {
-				// Cap at 5% — uniform scaling from 1.0cm → 1.05cm SA is visually imperceptible.
-				// Beyond 5%, per-piece scaling would produce visible SA non-uniformity (Jovita's
-				// original complaint) and per-vertex inconsistent-piece fallback is still WIP.
-				if (scalePct > 0.05) {
+				// Temporary: revert to 4% cap while per-vertex inconsistent-piece
+				// fallback is being fixed. Jovita validated that 4% uniform scaling
+				// keeps SA distortion visually imperceptible.
+				if (scalePct > 0.04) {
 					return json({
 						grading,
 						scale_pct: +(scalePct * 100).toFixed(1),
 						grading_method: 'grade_rules_exceeded',
 						steps_beyond: stepResult.steps_beyond,
-						error: `Your measurements are ${(scalePct * 100).toFixed(1)}% beyond size ${grading.target_size}. Custom-fit patterns work best within 5% adjustment. For larger differences, we recommend downloading the standard ${grading.target_size} size and applying manual alterations.`
+						error: `Your measurements are ${(scalePct * 100).toFixed(0)}% beyond size ${grading.target_size}. Custom-fit patterns work best within 4% adjustment. For larger differences, we recommend downloading the standard ${grading.target_size} size and applying manual alterations.`
 					});
 				}
 
