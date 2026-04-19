@@ -150,12 +150,14 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
                 except Exception:
                     pass
 
-            # Pass 1: compute piece centers from target size layer
+            # Pass 1: compute piece centers AND anchors from target size layer
             piece_centers = []
+            piece_anchors = []
             in_target = False
             in_piece = False
             q_depth = 0
             p_lines = []
+            cur_anchor = (0.0, 0.0)
             for line in lines:
                 s = line.strip()
                 if target_mc and (f'/{target_mc} BDC' in s or f'/{target_mc} ' in s and s.endswith('BDC')):
@@ -163,8 +165,11 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
                 if s == 'EMC' and in_target:
                     in_target = False; continue
                 if in_target and not in_piece:
-                    if PIECE_RE.match(s):
-                        in_piece = True; p_lines = []; q_depth = 1; continue
+                    _pm = PIECE_RE.match(s)
+                    if _pm:
+                        in_piece = True; p_lines = []; q_depth = 1
+                        cur_anchor = (float(_pm.group(1)), float(_pm.group(2)))
+                        continue
                 if in_target and in_piece:
                     if s.startswith('q') or s == 'q': q_depth += 1
                     elif s == 'Q':
@@ -183,30 +188,13 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
                             cx = (min(xs) + max(xs)) / 2 if xs else 0
                             cy = (min(ys) + max(ys)) / 2 if ys else 0
                             piece_centers.append((cx, cy))
+                            piece_anchors.append(cur_anchor)
                             in_piece = False; continue
                     p_lines.append(line)
 
             # Group paired pieces (cutting line + seam allowance) by anchor proximity.
             # Pairs must share the SAME center so they shift identically and stay aligned.
             if piece_scales and len(piece_centers) > 1:
-                # Also collect anchors from Pass 1 for grouping
-                piece_anchors = []
-                _in_t = False; _in_p = False
-                for line in lines:
-                    s = line.strip()
-                    if target_mc and (f'/{target_mc} BDC' in s or f'/{target_mc} ' in s and s.endswith('BDC')):
-                        _in_t = True; continue
-                    if s == 'EMC' and _in_t:
-                        _in_t = False; continue
-                    if _in_t and not _in_p:
-                        _m = PIECE_RE.match(s)
-                        if _m:
-                            piece_anchors.append((float(_m.group(1)), float(_m.group(2))))
-                            _in_p = True; continue
-                    if _in_t and _in_p:
-                        if s == 'Q' or (s.startswith('Q') and len(s) == 1):
-                            _in_p = False
-
                 # Group by anchor proximity (< 100pt = same garment piece)
                 import math as _math
                 groups = []  # [[idx, idx, ...], ...]
@@ -231,11 +219,31 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
                         shared_centers[i] = (avg_cx, avg_cy)
                 piece_centers = shared_centers
 
-            # Pass 2: rewrite all size layer transforms with centered scaling
+            # Pass 2: rewrite all size layer transforms with centered scaling.
+            # Also scale bare `re` rectangles inside the size BDC — some pieces
+            # (e.g. label info boxes) draw their inner cutting rectangle as a
+            # standalone `x y w h re` operator outside any q...Q block.
+            # Without this, the outer SA outline scales but the inner cutting
+            # rectangle stays put — visible as a drifted gap on the fold edge.
+            RE_RE = _re.compile(r'^([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+re(\s+[SBbFfn*]+)?\s*$')
             output = []
             bdc_stack = []
             piece_seq = 0
+            q_depth = 0
             scaled_count = 0
+            re_scaled_count = 0
+
+            def _find_piece_for_re(rx, ry):
+                """Match bare re to its enclosing piece by anchor coincidence."""
+                best_i, best_d = -1, 1e9
+                for i, (ax, ay) in enumerate(piece_anchors):
+                    d = abs(ax - rx) + abs(ay - ry)
+                    if d < best_d:
+                        best_d = d; best_i = i
+                # Require anchor match within 0.5pt
+                if best_d < 0.5:
+                    return best_i
+                return -1
 
             for line in lines:
                 s = line.strip()
@@ -245,6 +253,7 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
                     bdc_stack.append(is_size)
                     if is_size:
                         piece_seq = 0
+                        q_depth = 0
                     output.append(line)
                     continue
 
@@ -260,7 +269,6 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
                         x = float(m.group(1))
                         y = float(m.group(2))
                         # Per-piece scale factors (from grade rules) or uniform fallback.
-                        # piece_scales is a flat global list indexed by page-order; use offset.
                         global_idx = global_piece_offset + piece_seq
                         if piece_scales and global_idx < len(piece_scales):
                             psw, psh = piece_scales[global_idx]
@@ -275,12 +283,48 @@ def extract_single_size(input_path, target_size, output_path, scale_w=None, scal
                             output.append(f'q {psw:.6f} 0 0 {psh:.6f} {x} {y} cm')
                         piece_seq += 1
                         scaled_count += 1
+                        q_depth += 1  # entered a q block
                         continue
+
+                    # Bare rectangle — only scale if its anchor coincides with a
+                    # known piece anchor (within 0.5pt). Page-level wrappers and
+                    # label/grain-line rectangles without matching pieces stay untouched.
+                    # Safe inside nested q blocks because piece bodies use local
+                    # coords (near origin) that won't match any piece anchor.
+                    rm = RE_RE.match(s)
+                    if rm:
+                        rx = float(rm.group(1)); ry = float(rm.group(2))
+                        rw = float(rm.group(3)); rh = float(rm.group(4))
+                        trailing = rm.group(5) or ''
+                        idx = _find_piece_for_re(rx, ry)
+                        if idx >= 0:
+                            gidx = global_piece_offset + idx
+                            if piece_scales and gidx < len(piece_scales):
+                                psw, psh = piece_scales[gidx]
+                            else:
+                                psw, psh = scale_w, scale_h
+                            cx, cy = piece_centers[idx]
+                            ax, ay = piece_anchors[idx]
+                            wcx = ax + cx; wcy = ay + cy
+                            new_rx = wcx + (rx - wcx) * psw
+                            new_ry = wcy + (ry - wcy) * psh
+                            new_rw = rw * psw
+                            new_rh = rh * psh
+                            output.append(f'{new_rx:.4f} {new_ry:.4f} {new_rw:.4f} {new_rh:.4f} re{trailing}')
+                            re_scaled_count += 1
+                            continue
+
+                    # Track q_depth for generic q and all Q operators
+                    if s.startswith('q ') or s == 'q':
+                        q_depth += 1
+                    elif s == 'Q':
+                        if q_depth > 0: q_depth -= 1
 
                 output.append(line)
 
             page['/Contents'] = pdf.make_stream('\n'.join(output).encode('latin-1'))
-            print(f"  Center-scaled {scaled_count} piece transforms ({len(piece_centers)} centers), Layer 1 untouched")
+            extra = f" + {re_scaled_count} re rects" if re_scaled_count else ""
+            print(f"  Center-scaled {scaled_count} piece transforms ({len(piece_centers)} centers){extra}, Layer 1 untouched")
 
             # Advance global piece offset for next page's piece_scales lookup
             global_piece_offset += len(piece_centers)
